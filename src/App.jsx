@@ -74,10 +74,17 @@ export default function App() {
       return
     }
 
-    setNotes((current) => mergeNotes(current, data ?? []))
+    setNotes((current) => {
+      const heldId = dragRef.current?.id
+      const next = data ?? []
+      if (!heldId) return next
+      const held = current.find((note) => note.id === heldId)
+      if (!held) return next
+      return next.map((note) => (note.id === heldId ? held : note))
+    })
     setStatus('live')
     setError('')
-  }, [mergeNotes])
+  }, [])
 
   useEffect(() => {
     if (!supabase) return undefined
