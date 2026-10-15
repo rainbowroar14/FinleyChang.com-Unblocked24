@@ -132,7 +132,7 @@ input {
   overflow-wrap: anywhere;
   pointer-events: none;
   user-select: none;
-  transform: translate(-50%, -50%) rotate(var(--tilt, -1deg));
+  transform: translate(-50%, -50%) rotate(var(--tilt, -1deg)) scale(var(--zoom, 1));
   box-shadow:
     0 1px 0 rgba(28, 25, 23, 0.05),
     0 14px 30px rgba(28, 25, 23, 0.12);
@@ -146,7 +146,7 @@ input {
 
 .note.dragging {
   cursor: grabbing;
-  transform: translate(-50%, -50%) rotate(var(--tilt, -1deg)) scale(1.04);
+  transform: translate(-50%, -50%) rotate(var(--tilt, -1deg)) scale(calc(var(--zoom, 1) * 1.04));
 }
 
 body.dragging-note,
@@ -191,6 +191,8 @@ body.dragging-note * {
   position: absolute;
   z-index: 8600;
   pointer-events: none;
+  transform: scale(var(--zoom, 1));
+  transform-origin: 0 0;
 }
 
 .peer-cursor {

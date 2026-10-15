@@ -35,7 +35,9 @@ const noteNodes = new Map()
 const peers = new Map()
 const remoteDrags = new Map()
 const keys = new Set()
-const camera = { x: 0, y: 0 }
+const camera = { x: 0, y: 0, zoom: 1 }
+const MIN_ZOOM = 0.35
+const MAX_ZOOM = 3
 let notes = []
 let color = COLORS[0]
 let drag = null
@@ -251,14 +253,14 @@ async function loadNotes() {
 function worldFromEvent(event) {
   const rect = board.getBoundingClientRect()
   return {
-    x: clamp(event.clientX - rect.left + camera.x, -WORLD, WORLD),
-    y: clamp(event.clientY - rect.top + camera.y, -WORLD, WORLD),
+    x: clamp((event.clientX - rect.left) / camera.zoom + camera.x, -WORLD, WORLD),
+    y: clamp((event.clientY - rect.top) / camera.zoom + camera.y, -WORLD, WORLD),
   }
 }
 
 function positionElement(el, worldX, worldY) {
-  el.style.left = worldX - camera.x + 'px'
-  el.style.top = worldY - camera.y + 'px'
+  el.style.left = (worldX - camera.x) * camera.zoom + 'px'
+  el.style.top = (worldY - camera.y) * camera.zoom + 'px'
 }
 
 function noteWorld(note) {
@@ -269,7 +271,10 @@ function noteWorld(note) {
 }
 
 function layout() {
-  board.style.backgroundPosition = -camera.x + 'px ' + -camera.y + 'px'
+  const zoom = camera.zoom
+  board.style.setProperty('--zoom', String(zoom))
+  board.style.backgroundSize = 28 * zoom + 'px ' + 28 * zoom + 'px'
+  board.style.backgroundPosition = -camera.x * zoom + 'px ' + -camera.y * zoom + 'px'
   for (const note of notes) {
     const el = noteNodes.get(note.id)
     if (!el) continue
@@ -308,8 +313,8 @@ function updateComposer() {
   const nextHint = waiting
     ? waiting
     : draft
-      ? 'Click the wall to stick it. WASD or drag empty space to move.'
-      : '10 seconds between notes, and 10 seconds between deletes. WASD or drag the wall to move.'
+      ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
+      : '10 seconds between notes, and 10 seconds between deletes. WASD, drag, or scroll to zoom.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   const showGhost = Boolean(draft)
   if (ghost.hidden === showGhost) ghost.hidden = !showGhost
@@ -454,8 +459,8 @@ function moveDrag(event) {
   if (!drag || event.pointerId !== drag.pointerId) return
   const note = notes.find((item) => item.id === drag.id)
   if (!note) return
-  note.x = clamp(drag.startX + (event.clientX - drag.originX), -WORLD, WORLD)
-  note.y = clamp(drag.startY + (event.clientY - drag.originY), -WORLD, WORLD)
+  note.x = clamp(drag.startX + (event.clientX - drag.originX) / camera.zoom, -WORLD, WORLD)
+  note.y = clamp(drag.startY + (event.clientY - drag.originY) / camera.zoom, -WORLD, WORLD)
   drag.x = note.x
   drag.y = note.y
   pointer = worldFromEvent(event)
@@ -632,8 +637,8 @@ function onBoardPointerMove(event) {
     pan.travel = (pan.travel || 0) + Math.hypot(dx, dy)
     if (pan.travel > 5) pan.moved = true
     if (pan.moved) {
-      camera.x -= dx
-      camera.y -= dy
+      camera.x -= dx / camera.zoom
+      camera.y -= dy / camera.zoom
       board.classList.add('panning')
     }
   }
@@ -656,6 +661,24 @@ board.addEventListener('pointerleave', () => {
   if (!drag && !input.value.trim()) ghost.hidden = true
 })
 board.addEventListener('click', place)
+board.addEventListener(
+  'wheel',
+  (event) => {
+    event.preventDefault()
+    const rect = board.getBoundingClientRect()
+    const sx = event.clientX - rect.left
+    const sy = event.clientY - rect.top
+    const oldZoom = camera.zoom
+    const next = clamp(oldZoom * Math.exp(-event.deltaY * 0.0012), MIN_ZOOM, MAX_ZOOM)
+    if (next === oldZoom) return
+    camera.x = sx / oldZoom + camera.x - sx / next
+    camera.y = sy / oldZoom + camera.y - sy / next
+    camera.zoom = next
+    pointer = worldFromEvent(event)
+    layout()
+  },
+  { passive: false },
+)
 document.getElementById('composer').addEventListener('submit', (event) => event.preventDefault())
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
@@ -686,8 +709,8 @@ function tick(now) {
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1
   if (keys.has('d') || keys.has('arrowright')) mx += 1
   if (mx || my) {
-    camera.x += mx * 760 * dt
-    camera.y += my * 760 * dt
+    camera.x += (mx * 760 * dt) / camera.zoom
+    camera.y += (my * 760 * dt) / camera.zoom
     layout()
     publishSoon()
   }
