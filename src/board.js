@@ -108,12 +108,68 @@ function isBoardNote(note) {
 
 function shownName(value) {
   const raw = String(value || '').trim().slice(0, 20)
-  if (!raw || hasBlockedWord(raw)) return 'Guest'
+  if (!raw || raw.toLowerCase() === 'guest' || hasBlockedWord(raw)) return 'Guest'
   return raw
 }
 
 function myName() {
-  return shownName(nameInput.value)
+  return shownName(localStorage.getItem('sticky-name') || '')
+}
+
+function nameTakenLocally(raw) {
+  const key = String(raw || '').trim().toLowerCase()
+  if (!key || key === 'guest') return false
+  for (const peer of peers.values()) {
+    if (String(peer.name || '').toLowerCase() === key) return true
+  }
+  return false
+}
+
+let nameTimer = 0
+let nameTicket = 0
+
+function queueNameClaim(raw) {
+  clearTimeout(nameTimer)
+  nameTimer = setTimeout(() => claimName(raw), 350)
+}
+
+async function claimName(raw, quiet) {
+  const wanted = String(raw || '').trim().slice(0, 20)
+  const ticket = quiet ? nameTicket : ++nameTicket
+  try {
+    const accepted = await api('', {
+      method: 'POST',
+      table: 'rpc/claim_name',
+      body: { cid: clientId(), wanted },
+    })
+    if (!quiet && ticket !== nameTicket) return
+    const next = shownName(accepted)
+    if (next === 'Guest') {
+      if (!wanted || wanted.toLowerCase() === 'guest') localStorage.setItem('sticky-name', '')
+    } else {
+      localStorage.setItem('sticky-name', next)
+    }
+    if (!quiet) {
+      showError('')
+      publishSoon()
+    }
+  } catch (err) {
+    if (!quiet && ticket !== nameTicket) return
+    const message = serverMessage(err.message, '')
+    if (/taken/i.test(message)) {
+      if (quiet) localStorage.setItem('sticky-name', '')
+      if (!quiet || !nameInput.matches(':focus')) nameInput.value = localStorage.getItem('sticky-name') || ''
+      showError('That name is taken.')
+      publishSoon()
+      return
+    }
+    if (/cannot be used/i.test(message)) {
+      showError('That name cannot be used.')
+      nameInput.value = localStorage.getItem('sticky-name') || ''
+      return
+    }
+    if (!quiet) showError('That name did not save.')
+  }
 }
 
 function clientId() {
@@ -753,7 +809,7 @@ function ensurePeer(id) {
   card.hidden = true
   el.append(cursor, name, card)
   board.appendChild(el)
-  const peer = { el, x: 0, y: 0, text: '', color: '#FFE566', at: 0 }
+  const peer = { el, x: 0, y: 0, text: '', color: '#FFE566', name: 'Guest', at: 0 }
   peers.set(id, peer)
   return peer
 }
@@ -766,8 +822,8 @@ function applyPeer(payload) {
   peer.text = String(payload.text || '').slice(0, MAX_LENGTH)
   peer.color = payload.color || '#FFE566'
   peer.at = Date.now()
-  const shown = shownName(payload.name)
-  peer.el.querySelector('.peer-name').textContent = shown
+  peer.name = shownName(payload.name)
+  peer.el.querySelector('.peer-name').textContent = peer.name
   const card = peer.el.querySelector('.peer-card')
   const showCard = Boolean(peer.text) && !payload.dragId
   card.hidden = !showCard
@@ -932,11 +988,28 @@ nameInput.addEventListener('input', () => {
     nameInput.value = localStorage.getItem('sticky-name') || ''
     return
   }
-  localStorage.setItem('sticky-name', raw)
-  showError('')
-  publishSoon()
+  if (raw && nameTakenLocally(raw)) {
+    showError('That name is taken.')
+    nameInput.value = localStorage.getItem('sticky-name') || ''
+    return
+  }
+  queueNameClaim(raw)
 })
 nameInput.value = (localStorage.getItem('sticky-name') || '').slice(0, 20)
+claimName(nameInput.value)
+window.setInterval(() => claimName(localStorage.getItem('sticky-name') || '', true), 4000)
+window.addEventListener('pagehide', () => {
+  fetch(API.replace('/notes', '/rpc/claim_name'), {
+    method: 'POST',
+    headers: {
+      apikey: KEY,
+      Authorization: 'Bearer ' + KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ cid: clientId(), wanted: '' }),
+    keepalive: true,
+  })
+})
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
   const raw = input.value.trim().toLowerCase()
