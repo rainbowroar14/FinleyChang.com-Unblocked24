@@ -189,13 +189,6 @@ export default function App() {
 
   function moveDrag(event) {
     const drag = dragRef.current
-    window.__lastMove = {
-      hasDrag: Boolean(drag),
-      dragPointer: drag?.pointerId,
-      eventPointer: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-    }
     if (!drag || drag.pointerId !== event.pointerId || !boardRef.current) return
     const rect = boardRef.current.getBoundingClientRect()
     const x = clamp(drag.startX + ((event.clientX - drag.originX) / rect.width) * 100, 6, 94)
