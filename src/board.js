@@ -722,7 +722,7 @@ function connectLive() {
 
 function onBoardPointerDown(event) {
   if (event.button != null && event.button !== 0) return
-  if (event.target.closest('article.note')) return
+  if (event.target.closest('article.note, .paintbar, .coords')) return
   pan = {
     pointerId: event.pointerId,
     x: event.clientX,
@@ -1275,6 +1275,9 @@ gameBtn.addEventListener('click', () => {
   placeKind = placeKind === 'game' ? 'text' : 'game'
   if (placeKind !== 'text') input.value = ''
   updateComposer()
+})
+paintbar.addEventListener('pointerdown', (event) => {
+  event.stopPropagation()
 })
 paintbar.addEventListener('click', (event) => {
   const inkButton = event.target.closest('.ink')
