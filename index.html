@@ -8,9 +8,34 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600;700&family=Patrick+Hand&family=Syne:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <p class="mark">Sticky Board</p>
+          <p class="tag">Up to 100 characters. Pick a color, click the wall, and drag any note over someone else’s.</p>
+        </div>
+        <p class="status status-loading" id="status"><span class="dot"></span><span id="status-text">Connecting</span></p>
+      </header>
+
+      <div class="board" id="board">
+        <p class="hint" id="hint" hidden>The wall is empty. Stick the first note.</p>
+        <div class="note ghost" id="ghost" hidden></div>
+      </div>
+
+      <form class="composer" id="composer">
+        <p class="error" id="error" hidden></p>
+        <label class="field">
+          <span class="sr">Note</span>
+          <input id="note-input" maxlength="100" placeholder="Type a note" autofocus />
+          <span class="count" id="count">0/100</span>
+        </label>
+        <div class="colors" id="colors" role="listbox" aria-label="Note color"></div>
+        <p class="place-hint" id="place-hint">Write something, then click the wall. Drag a note to cover another one.</p>
+      </form>
+    </div>
+    <script src="src/board.js"></script>
   </body>
 </html>

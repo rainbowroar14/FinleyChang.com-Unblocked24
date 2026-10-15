@@ -141,6 +141,12 @@ input {
   transform: translate(-50%, -50%) rotate(var(--tilt, -1deg)) scale(1.04);
 }
 
+body.dragging-note,
+body.dragging-note * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 .ghost {
   z-index: 9000;
   opacity: 0.92;
