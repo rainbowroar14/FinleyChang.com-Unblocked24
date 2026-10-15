@@ -8,14 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600;700&family=Patrick+Hand&family=Syne:wght@700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="src/styles.css?v=11" />
+    <link rel="stylesheet" href="src/styles.css?v=12" />
   </head>
   <body>
     <div class="app">
       <header class="topbar">
         <div>
           <p class="mark">Sticky Board</p>
-          <p class="tag">Scroll to zoom. Press I on a note, drawing, or game.</p>
+          <p class="tag">Type / for a drawing, a game, or the table.</p>
         </div>
         <p class="status status-loading" id="status"><span class="dot"></span><span id="status-text">Connecting</span></p>
       </header>
@@ -42,6 +42,7 @@
       </div>
 
       <form class="composer" id="composer">
+        <ul class="suggest" id="suggest" hidden></ul>
         <p class="error" id="error" hidden></p>
         <label class="field">
           <span class="sr">Note</span>
@@ -49,17 +50,10 @@
           <span class="count" id="count">0/100</span>
         </label>
         <div class="colors" id="colors" role="listbox" aria-label="Note color"></div>
-        <div class="specials">
-          <button type="button" data-kind="draw" id="add-draw">Drawing</button>
-          <button type="button" data-kind="game" id="add-game">Tic-tac-toe</button>
-          <button type="button" data-kind="mine" id="add-mine">Mines</button>
-          <button type="button" data-kind="lights" id="add-lights">Lights</button>
-          <button type="button" data-kind="memo" id="add-memo">Memory</button>
-        </div>
-        <p class="place-hint" id="place-hint">Write something, then click the wall. Drag a note to cover another one.</p>
+        <p class="place-hint" id="place-hint">Type /, then Tab. Click the wall to place it.</p>
       </form>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-    <script src="src/board.js?v=13"></script>
+    <script src="src/board.js?v=14"></script>
   </body>
 </html>

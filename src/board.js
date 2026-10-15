@@ -63,7 +63,19 @@ const KINDS = {
     label: 'Memory',
     hint: 'Click the wall to place memory. Press I and match the pairs.',
   },
+  table: {
+    label: 'Table',
+    hint: 'Click the wall to place the element table. Press I, then click an element to light it up.',
+  },
 }
+const COMMANDS = [
+  { cmd: '/draw', kind: 'draw' },
+  { cmd: '/tictactoe', kind: 'game' },
+  { cmd: '/mines', kind: 'mine' },
+  { cmd: '/lights', kind: 'lights' },
+  { cmd: '/memory', kind: 'memo' },
+  { cmd: '/table', kind: 'table' },
+]
 let notes = []
 let color = COLORS[0]
 let drag = null
@@ -228,7 +240,7 @@ function paint(note) {
   el.setAttribute('aria-label', note.body)
   el.style.background = note.color
   el.style.color = textOn(note.color)
-  el.style.zIndex = String(note.z)
+  el.style.zIndex = editing === note.id ? '1000000' : String(note.z)
   el.style.setProperty('--tilt', (isBoardNote(note) ? 0 : note.tilt || 0) + 'deg')
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
   const label = el.querySelector('.note-text')
@@ -243,6 +255,9 @@ function paint(note) {
   } else if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') {
     label.hidden = true
     ensurePlay(el, note)
+  } else if (note.kind === 'table') {
+    label.hidden = true
+    ensureTable(el, note)
   } else if (label) {
     const editingThis = editing === note.id
     label.hidden = editingThis
@@ -409,23 +424,24 @@ function updateComposer() {
   if (count.textContent !== countText) count.textContent = countText
   count.classList.toggle('full', length === MAX_LENGTH)
   const draft = input.value.trim()
-  for (const button of document.querySelectorAll('.specials button')) {
-    button.classList.toggle('on', button.dataset.kind === placeKind)
-  }
-  board.classList.toggle('armed', Boolean(draft) || placeKind !== 'text')
+  const slash = draft.startsWith('/')
+  board.classList.toggle('armed', !slash && (Boolean(draft) || placeKind !== 'text'))
   const waiting = cooldownText()
   const spec = KINDS[placeKind]
-  const ghostLabel = spec ? spec.label : draft
+  const ghostLabel = slash ? '' : spec ? spec.label : draft
   const nextHint = waiting
     ? waiting
-    : spec
-      ? spec.hint
-      : draft
-        ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-        : 'Scroll to zoom. Press I on a note, drawing, or game.'
+    : slash
+      ? 'Press Tab to pick the top command.'
+      : spec
+        ? spec.hint
+        : draft
+          ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
+          : 'Type / for a drawing, a game, or the table.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   const showGhost = Boolean(ghostLabel)
   ghost.classList.toggle('special', placeKind !== 'text')
+  ghost.classList.toggle('table', placeKind === 'table')
   if (ghost.hidden === showGhost) ghost.hidden = !showGhost
   if (showGhost && ghost.textContent !== ghostLabel) ghost.textContent = ghostLabel
   if (showGhost) {
@@ -483,14 +499,41 @@ function serverMessage(detail, fallback) {
   return fallback
 }
 
-function openTable() {
-  if (input.value.trim().toLowerCase() !== '/table') return false
-  location.href = 'table.html'
-  return true
+function commandMatches() {
+  const raw = input.value.trim().toLowerCase()
+  if (!raw.startsWith('/')) return []
+  return COMMANDS.filter((item) => item.cmd.startsWith(raw))
+}
+
+function chooseCommand(item) {
+  placeKind = item.kind
+  input.value = ''
+  renderSuggest([])
+  updateComposer()
+}
+
+function renderSuggest(matches) {
+  const suggest = document.getElementById('suggest')
+  suggest.replaceChildren()
+  if (!matches.length) {
+    suggest.hidden = true
+    return
+  }
+  suggest.hidden = false
+  matches.forEach((item, index) => {
+    const row = document.createElement('li')
+    if (index === 0) row.className = 'top'
+    row.textContent = item.cmd + '  ' + KINDS[item.kind].label
+    row.addEventListener('pointerdown', (event) => {
+      event.preventDefault()
+      chooseCommand(item)
+    })
+    suggest.appendChild(row)
+  })
 }
 
 async function place(event) {
-  if (openTable()) return
+  if (input.value.trim().startsWith('/')) return
   if (blockPlace) {
     blockPlace = false
     return
@@ -790,8 +833,10 @@ function onBoardPointerMove(event) {
   } catch (err) {
     /* A tooltip problem should not stop the wall from moving. */
   }
-  if (input.value.trim() || placeKind !== 'text') {
+  if (!input.value.trim().startsWith('/') && (input.value.trim() || placeKind !== 'text')) {
     ghost.hidden = false
+    ghost.classList.toggle('special', placeKind !== 'text')
+    ghost.classList.toggle('table', placeKind === 'table')
     ghost.textContent = KINDS[placeKind] ? KINDS[placeKind].label : input.value.trim()
     ghost.style.background = color
     ghost.style.color = textOn(color)
@@ -859,8 +904,19 @@ input.addEventListener('focus', () => {
 })
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
-  if (openTable()) return
-  if (input.value.trim()) placeKind = 'text'
+  const raw = input.value.trim().toLowerCase()
+  if (raw.startsWith('/')) {
+    const matches = commandMatches()
+    const exact = matches.find((item) => item.cmd === raw)
+    if (exact && matches.length === 1) {
+      chooseCommand(exact)
+      return
+    }
+    renderSuggest(matches)
+  } else {
+    renderSuggest([])
+    if (raw) placeKind = 'text'
+  }
   updateComposer()
 })
 
@@ -872,6 +928,14 @@ window.addEventListener('keydown', (event) => {
     return
   }
   const typing = document.activeElement === input || (document.activeElement && document.activeElement.classList.contains('editbox'))
+  if (document.activeElement === input && event.key === 'Tab') {
+    const matches = commandMatches()
+    if (matches.length) {
+      event.preventDefault()
+      chooseCommand(matches[0])
+    }
+    return
+  }
   if (!typing && (key === 'i' || event.code === 'KeyI')) {
     if (hovered) {
       event.preventDefault()
@@ -957,7 +1021,14 @@ function syncTip(event) {
     return
   }
   tip.hidden = false
-  tip.textContent = hovered.kind === 'draw' ? 'Press I to draw' : hovered.kind === 'text' ? 'Press I to edit' : 'Press I to play'
+  tip.textContent =
+    hovered.kind === 'draw'
+      ? 'Press I to draw'
+      : hovered.kind === 'text'
+        ? 'Press I to edit'
+        : hovered.kind === 'table'
+          ? 'Press I to open'
+          : 'Press I to play'
   tip.style.left = event.clientX + 14 + 'px'
   tip.style.top = event.clientY + 18 + 'px'
 }
@@ -1053,6 +1124,136 @@ async function playCell(id, index) {
 
 const MINE_COLORS = { 1: '#2563eb', 2: '#16a34a', 3: '#e11d48', 4: '#7c3aed', 5: '#b45309', 6: '#0f766e', 7: '#1c1917', 8: '#57534e' }
 
+const ELEMENTS = [
+  ['Hydrogen', 'H', 1, 0, 1, 1], ['Helium', 'He', 2, 2, 2, 4], ['Lithium', 'Li', 3, 4, 3, 7], ['Beryllium', 'Be', 4, 5, 4, 9],
+  ['Boron', 'B', 5, 6, 5, 11], ['Carbon', 'C', 6, 6, 6, 12], ['Nitrogen', 'N', 7, 7, 7, 14], ['Oxygen', 'O', 8, 8, 8, 16],
+  ['Fluorine', 'F', 9, 10, 9, 19], ['Neon', 'Ne', 10, 10, 10, 20], ['Sodium', 'Na', 11, 12, 11, 23], ['Magnesium', 'Mg', 12, 12, 12, 24],
+  ['Aluminum', 'Al', 13, 14, 13, 27], ['Silicon', 'Si', 14, 14, 14, 28], ['Phosphorus', 'P', 15, 16, 15, 31], ['Sulfur', 'S', 16, 16, 16, 32],
+  ['Chlorine', 'Cl', 17, 18, 17, 35], ['Argon', 'Ar', 18, 22, 18, 40], ['Potassium', 'K', 19, 20, 19, 39], ['Calcium', 'Ca', 20, 20, 20, 40],
+  ['Scandium', 'Sc', 21, 24, 21, 45], ['Titanium', 'Ti', 22, 26, 22, 48], ['Vanadium', 'V', 23, 28, 23, 51], ['Chromium', 'Cr', 24, 28, 24, 52],
+  ['Manganese', 'Mn', 25, 30, 25, 55], ['Iron', 'Fe', 26, 30, 26, 56], ['Cobalt', 'Co', 27, 32, 27, 59], ['Nickel', 'Ni', 28, 30, 28, 58],
+  ['Copper', 'Cu', 29, 34, 29, 63], ['Zinc', 'Zn', 30, 34, 30, 64], ['Gallium', 'Ga', 31, 38, 31, 69], ['Germanium', 'Ge', 32, 42, 32, 74],
+  ['Arsenic', 'As', 33, 42, 33, 75], ['Selenium', 'Se', 34, 46, 34, 80], ['Bromine', 'Br', 35, 44, 35, 79], ['Krypton', 'Kr', 36, 48, 36, 84],
+  ['Rubidium', 'Rb', 37, 48, 37, 85], ['Strontium', 'Sr', 38, 50, 38, 88], ['Yttrium', 'Y', 39, 50, 39, 89], ['Zirconium', 'Zr', 40, 50, 40, 90],
+  ['Niobium', 'Nb', 41, 52, 41, 93], ['Molybdenum', 'Mo', 42, 56, 42, 98], ['Technetium', 'Tc', 43, 55, 43, 98], ['Ruthenium', 'Ru', 44, 58, 44, 102],
+  ['Rhodium', 'Rh', 45, 58, 45, 103], ['Palladium', 'Pd', 46, 60, 46, 106], ['Silver', 'Ag', 47, 60, 47, 107], ['Cadmium', 'Cd', 48, 66, 48, 114],
+  ['Indium', 'In', 49, 66, 49, 115], ['Tin', 'Sn', 50, 70, 50, 120], ['Antimony', 'Sb', 51, 70, 51, 121], ['Tellurium', 'Te', 52, 78, 52, 130],
+  ['Iodine', 'I', 53, 74, 53, 127], ['Xenon', 'Xe', 54, 78, 54, 132], ['Cesium', 'Cs', 55, 78, 55, 133], ['Barium', 'Ba', 56, 82, 56, 138],
+  ['Lanthanum', 'La', 57, 82, 57, 139], ['Cerium', 'Ce', 58, 82, 58, 140], ['Praseodymium', 'Pr', 59, 82, 59, 141], ['Neodymium', 'Nd', 60, 82, 60, 142],
+  ['Promethium', 'Pm', 61, 84, 61, 145], ['Samarium', 'Sm', 62, 90, 62, 152], ['Europium', 'Eu', 63, 90, 63, 153], ['Gadolinium', 'Gd', 64, 94, 64, 158],
+  ['Terbium', 'Tb', 65, 94, 65, 159], ['Dysprosium', 'Dy', 66, 98, 66, 164], ['Holmium', 'Ho', 67, 98, 67, 165], ['Erbium', 'Er', 68, 98, 68, 166],
+  ['Thulium', 'Tm', 69, 100, 69, 169], ['Ytterbium', 'Yb', 70, 104, 70, 174], ['Lutetium', 'Lu', 71, 104, 71, 175], ['Hafnium', 'Hf', 72, 108, 72, 180],
+  ['Tantalum', 'Ta', 73, 108, 73, 181], ['Tungsten', 'W', 74, 110, 74, 184], ['Rhenium', 'Re', 75, 112, 75, 187], ['Osmium', 'Os', 76, 116, 76, 192],
+  ['Iridium', 'Ir', 77, 116, 77, 193], ['Platinum', 'Pt', 78, 117, 78, 195], ['Gold', 'Au', 79, 118, 79, 197], ['Mercury', 'Hg', 80, 122, 80, 202],
+  ['Thallium', 'Tl', 81, 124, 81, 205], ['Lead', 'Pb', 82, 126, 82, 208], ['Bismuth', 'Bi', 83, 126, 83, 209], ['Polonium', 'Po', 84, 125, 84, 209],
+  ['Astatine', 'At', 85, 125, 85, 210], ['Radon', 'Rn', 86, 136, 86, 222], ['Francium', 'Fr', 87, 136, 87, 223], ['Radium', 'Ra', 88, 138, 88, 226],
+  ['Actinium', 'Ac', 89, 138, 89, 227], ['Thorium', 'Th', 90, 142, 90, 232], ['Protactinium', 'Pa', 91, 140, 91, 231], ['Uranium', 'U', 92, 146, 92, 238],
+  ['Neptunium', 'Np', 93, 144, 93, 237], ['Plutonium', 'Pu', 94, 150, 94, 244], ['Americium', 'Am', 95, 148, 95, 243], ['Curium', 'Cm', 96, 151, 96, 247],
+  ['Berkelium', 'Bk', 97, 150, 97, 247], ['Californium', 'Cf', 98, 153, 98, 251], ['Einsteinium', 'Es', 99, 153, 99, 252], ['Fermium', 'Fm', 100, 157, 100, 257],
+  ['Mendelevium', 'Md', 101, 157, 101, 258], ['Nobelium', 'No', 102, 157, 102, 259], ['Lawrencium', 'Lr', 103, 163, 103, 266], ['Rutherfordium', 'Rf', 104, 163, 104, 267],
+  ['Dubnium', 'Db', 105, 163, 105, 268], ['Seaborgium', 'Sg', 106, 163, 106, 269], ['Bohrium', 'Bh', 107, 163, 107, 270], ['Hassium', 'Hs', 108, 161, 108, 269],
+  ['Meitnerium', 'Mt', 109, 169, 109, 278], ['Darmstadtium', 'Ds', 110, 171, 110, 281], ['Roentgenium', 'Rg', 111, 171, 111, 282], ['Copernicium', 'Cn', 112, 173, 112, 285],
+  ['Nihonium', 'Nh', 113, 173, 113, 286], ['Flerovium', 'Fl', 114, 175, 114, 289], ['Moscovium', 'Mc', 115, 175, 115, 290], ['Livermorium', 'Lv', 116, 177, 116, 293],
+  ['Tennessine', 'Ts', 117, 177, 117, 294], ['Oganesson', 'Og', 118, 176, 118, 294],
+].map(([name, symbol, protons, neutrons, electrons, mass]) => ({ name, symbol, protons, neutrons, electrons, mass }))
+
+const ELEMENT_KIND = {
+  H: 'nonmetal', Li: 'alkali', Na: 'alkali', K: 'alkali', Rb: 'alkali', Cs: 'alkali', Fr: 'alkali',
+  Be: 'earth', Mg: 'earth', Ca: 'earth', Sr: 'earth', Ba: 'earth', Ra: 'earth',
+  B: 'metalloid', Si: 'metalloid', Ge: 'metalloid', As: 'metalloid', Sb: 'metalloid', Te: 'metalloid',
+  C: 'nonmetal', N: 'nonmetal', O: 'nonmetal', P: 'nonmetal', S: 'nonmetal', Se: 'nonmetal',
+  F: 'halogen', Cl: 'halogen', Br: 'halogen', I: 'halogen', At: 'halogen', Ts: 'halogen',
+  He: 'noble', Ne: 'noble', Ar: 'noble', Kr: 'noble', Xe: 'noble', Rn: 'noble', Og: 'noble',
+  Al: 'post', Ga: 'post', In: 'post', Sn: 'post', Tl: 'post', Pb: 'post', Bi: 'post', Po: 'post',
+  Nh: 'post', Fl: 'post', Mc: 'post', Lv: 'post',
+}
+const ELEMENT_COLORS = {
+  alkali: '#fb923c', earth: '#facc15', transition: '#38bdf8', post: '#a78bfa', metalloid: '#4ade80',
+  nonmetal: '#f9a8d4', halogen: '#fb7185', noble: '#94a3b8', lanthanide: '#f472b6', actinide: '#e879f9',
+}
+
+function elementKind(item) {
+  if (ELEMENT_KIND[item.symbol]) return ELEMENT_KIND[item.symbol]
+  if (item.protons >= 57 && item.protons <= 71) return 'lanthanide'
+  if (item.protons >= 89 && item.protons <= 103) return 'actinide'
+  return 'transition'
+}
+
+function tableSpot(z) {
+  if (z === 1) return [1, 1]
+  if (z === 2) return [1, 18]
+  if (z <= 4) return [2, z - 2]
+  if (z <= 10) return [2, z + 8]
+  if (z <= 12) return [3, z - 10]
+  if (z <= 18) return [3, z]
+  if (z <= 36) return [4, z - 18]
+  if (z <= 54) return [5, z - 36]
+  if (z === 55) return [6, 1]
+  if (z === 56) return [6, 2]
+  if (z <= 71) return [9, z - 54]
+  if (z <= 86) return [6, z - 68]
+  if (z === 87) return [7, 1]
+  if (z === 88) return [7, 2]
+  if (z <= 103) return [10, z - 86]
+  return [7, z - 100]
+}
+
+function ensureTable(el, note) {
+  let grid = el.querySelector('.ptable')
+  if (!grid) {
+    const read = document.createElement('p')
+    read.className = 'tread'
+    grid = document.createElement('div')
+    grid.className = 'ptable'
+    ELEMENTS.forEach((item, index) => {
+      const cell = document.createElement('button')
+      cell.type = 'button'
+      const kind = elementKind(item)
+      cell.className = 'pcell ' + kind
+      const spot = tableSpot(item.protons)
+      cell.style.gridRow = String(spot[0])
+      cell.style.gridColumn = String(spot[1])
+      cell.style.background = ELEMENT_COLORS[kind]
+      cell.textContent = item.symbol
+      cell.addEventListener('pointerdown', (event) => {
+        if (editing === el.dataset.id) event.stopPropagation()
+      })
+      cell.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        toggleElement(el.dataset.id, index)
+      })
+      grid.appendChild(cell)
+    })
+    el.append(read, grid)
+    ensureWhere(el)
+  }
+  const bits = (note.state || '').padEnd(118, '0').slice(0, 118)
+  let lastLit = null
+  ;[...grid.children].forEach((cell, index) => {
+    const on = bits[index] === '1'
+    cell.classList.toggle('lit', on)
+    if (on) lastLit = ELEMENTS[index]
+  })
+  const focus = el.dataset.focus
+  const info = focus !== undefined ? ELEMENTS[Number(focus)] : lastLit
+  const read = el.querySelector('.tread')
+  read.textContent = info
+    ? info.symbol + ' ' + info.name + ' · ' + info.protons + 'p ' + info.neutrons + 'n ' + info.electrons + 'e · mass ' + info.mass
+    : 'Click an element'
+}
+
+async function toggleElement(id, index) {
+  if (editing !== id || savingPlay) return
+  const note = notes.find((item) => item.id === id)
+  if (!note || note.kind !== 'table') return
+  const bits = (note.state || '0'.repeat(118)).padEnd(118, '0').slice(0, 118).split('')
+  bits[index] = bits[index] === '1' ? '0' : '1'
+  const el = noteNodes.get(id)
+  if (el) el.dataset.focus = String(index)
+  await saveState(note, bits.join(''))
+}
+
 function freshMine() {
   const mines = Array(36).fill('0')
   while (mines.filter((bit) => bit === '1').length < 6) mines[Math.floor(Math.random() * 36)] = '1'
@@ -1081,6 +1282,7 @@ function freshState(kind) {
   if (kind === 'mine') return freshMine()
   if (kind === 'lights') return freshLights()
   if (kind === 'memo') return freshMemo()
+  if (kind === 'table') return '0'.repeat(118)
   return null
 }
 
@@ -1282,14 +1484,20 @@ async function saveState(note, next) {
   note.state = next
   savingPlay = note.id
   const el = noteNodes.get(note.id)
-  if (el) ensurePlay(el, note)
+  if (el) {
+    if (note.kind === 'table') ensureTable(el, note)
+    else ensurePlay(el, note)
+  }
   try {
     await api('?id=eq.' + note.id, { method: 'PATCH', body: { state: next } })
     showError('')
   } catch (err) {
     note.state = previous
     savingPlay = null
-    if (el) ensurePlay(el, note)
+    if (el) {
+      if (note.kind === 'table') ensureTable(el, note)
+      else ensurePlay(el, note)
+    }
     showError(serverMessage(err.message, 'That move is not next.'))
     loadNotes()
   } finally {
@@ -1555,6 +1763,7 @@ function enterEdit(note) {
   const el = noteNodes.get(note.id)
   if (el && note.kind === 'game') ensureGame(el, note)
   if (el && (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo')) ensurePlay(el, note)
+  if (el && note.kind === 'table') ensureTable(el, note)
   if (el && note.kind === 'text') openTextEdit(el, note)
 }
 
@@ -1594,10 +1803,6 @@ async function commitTextEdit(id) {
     box.value = note.body
     return
   }
-  if (body.toLowerCase() === '/table') {
-    location.href = 'table.html'
-    return
-  }
   if (body === note.body) return
   if (hasBlockedWord(body)) {
     showError('That word cannot go on the board.')
@@ -1632,7 +1837,7 @@ function exitEdit() {
     const box = currentEl.querySelector('.editbox')
     if (box) box.hidden = true
     const label = currentEl.querySelector('.note-text')
-    if (label && !currentEl.classList.contains('draw') && !currentEl.classList.contains('game') && !currentEl.classList.contains('mine') && !currentEl.classList.contains('lights') && !currentEl.classList.contains('memo')) label.hidden = false
+    if (label && !currentEl.classList.contains('draw') && !currentEl.classList.contains('game') && !currentEl.classList.contains('mine') && !currentEl.classList.contains('lights') && !currentEl.classList.contains('memo') && !currentEl.classList.contains('table')) label.hidden = false
   }
   for (const note of notes) {
     const el = noteNodes.get(note.id)
@@ -1651,7 +1856,9 @@ function glideCamera(dt) {
       return
     }
     const rect = board.getBoundingClientRect()
-    const zoom = clamp((Math.min(rect.width, rect.height) * 0.82) / 256, 1.15, MAX_ZOOM)
+    const zoom = note.kind === 'table'
+      ? clamp(Math.min((rect.width * 0.92) / 780, (rect.height * 0.86) / 500), 0.35, MAX_ZOOM)
+      : clamp((Math.min(rect.width, rect.height) * 0.82) / 256, 1.15, MAX_ZOOM)
     target = {
       x: note.x - rect.width / (2 * zoom),
       y: note.y - rect.height / (2 * zoom),
@@ -1676,13 +1883,6 @@ function glideCamera(dt) {
   }
 }
 
-for (const button of document.querySelectorAll('.specials button')) {
-  button.addEventListener('click', () => {
-    placeKind = placeKind === button.dataset.kind ? 'text' : button.dataset.kind
-    if (placeKind !== 'text') input.value = ''
-    updateComposer()
-  })
-}
 paintbar.addEventListener('pointerdown', (event) => {
   event.stopPropagation()
 })

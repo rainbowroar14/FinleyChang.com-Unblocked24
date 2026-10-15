@@ -247,6 +247,65 @@ body.dragging-note * {
   overflow: hidden;
 }
 
+.note.table,
+.ghost.special.table {
+  width: 760px;
+  height: 470px;
+  min-height: 0;
+  padding: 12px 12px 22px;
+  overflow: hidden;
+  font-family: Figtree, "Segoe UI", sans-serif;
+}
+
+.note.table .note-text {
+  display: none;
+}
+
+.note.table .ptable {
+  display: grid;
+  grid-template-columns: repeat(18, 1fr);
+  grid-template-rows: repeat(10, 28px);
+  gap: 3px;
+}
+
+.note.table .pcell {
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
+  min-width: 0;
+  font-family: Figtree, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1c1917;
+  cursor: pointer;
+  pointer-events: none;
+}
+
+.note.table .pcell.lit {
+  box-shadow: inset 0 0 0 2px #1c1917;
+  filter: brightness(1.18);
+}
+
+.note.table .tread {
+  margin: 0 0 8px;
+  min-height: 18px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.board.editing .note.draw,
+.board.editing .note.game,
+.board.editing .note.mine,
+.board.editing .note.lights,
+.board.editing .note.memo,
+.board.editing .note.table {
+  pointer-events: auto;
+}
+
+.board.editing .note.table .pcell {
+  pointer-events: auto;
+}
+
 .note.draw canvas {
   display: block;
   width: 256px;
@@ -540,7 +599,36 @@ body.dragging-note * {
   background: #ffe566;
 }
 
+.suggest {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid #eeebe6;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(28, 25, 23, 0.12);
+}
+
+.suggest li {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.suggest li.top,
+.suggest li:hover {
+  background: #ffe566;
+}
+
 .composer {
+  position: relative;
   width: min(720px, calc(100% - 24px));
   margin: 12px auto 16px;
   padding: 12px;
