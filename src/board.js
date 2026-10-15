@@ -102,9 +102,8 @@ const strokes = new Map()
 const seenStrokes = new Set()
 let strokeCursor = '1970-01-01T00:00:00+00:00'
 
-function isBoardNote(note) {
-  return Boolean(note && KINDS[note.kind])
-}
+let rotate = null
+const pointerScreen = { x: 0, y: 0 }
 
 function shownName(value) {
   const raw = String(value || '').trim().slice(0, 20)
@@ -308,7 +307,7 @@ function paint(note) {
   el.style.background = note.color
   el.style.color = textOn(note.color)
   el.style.zIndex = editing === note.id ? '1000000' : String(note.z)
-  el.style.setProperty('--tilt', (isBoardNote(note) ? 0 : note.tilt || 0) + 'deg')
+  el.style.setProperty('--tilt', shownTilt(note) + 'deg')
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
   el.classList.toggle('writing', note.kind === 'text' && editing === note.id)
   const label = el.querySelector('.note-text')
@@ -369,11 +368,15 @@ async function loadNotes() {
       method: 'GET',
     })
     const held = drag && notes.find((note) => note.id === drag.id)
+    const turning = !held && rotate && notes.find((note) => note.id === rotate.id)
     const open = editing && notes.find((note) => note.id === editing)
     const next = data || []
     if (held) {
       const index = next.findIndex((note) => note.id === held.id)
       if (index >= 0) next[index] = held
+    } else if (turning) {
+      const index = next.findIndex((note) => note.id === turning.id)
+      if (index >= 0) next[index] = turning
     }
     if (open && savingPlay === open.id) {
       const index = next.findIndex((note) => note.id === open.id)
@@ -434,6 +437,64 @@ function wrapTilt(value) {
   return angle
 }
 
+function noteCenterAngle(note, clientX, clientY) {
+  const el = noteNodes.get(note.id)
+  if (!el) return 0
+  const rect = el.getBoundingClientRect()
+  return (Math.atan2(clientY - (rect.top + rect.height / 2), clientX - (rect.left + rect.width / 2)) * 180) / Math.PI
+}
+
+function applyMouseRotate(note, clientX, clientY) {
+  if (!rotate || rotate.id !== note.id) rotate = { id: note.id, lastAngle: null }
+  const angle = noteCenterAngle(note, clientX, clientY)
+  if (rotate.lastAngle == null) {
+    rotate.lastAngle = angle
+    document.body.classList.add('rotating-note')
+    return
+  }
+  let delta = angle - rotate.lastAngle
+  if (delta > 180) delta -= 360
+  if (delta < -180) delta += 360
+  rotate.lastAngle = angle
+  note.tilt = wrapTilt((Number(note.tilt) || 0) + delta)
+  if (drag && drag.id === note.id) drag.tilt = note.tilt
+  layout()
+  publishSoon()
+}
+
+function beginMouseRotate(note) {
+  if (!note) return
+  if (!rotate || rotate.id !== note.id) rotate = { id: note.id, lastAngle: null }
+  document.body.classList.add('rotating-note')
+}
+
+async function endMouseRotate() {
+  document.body.classList.remove('rotating-note')
+  const current = rotate
+  rotate = null
+  if (!current || drag) return
+  const note = notes.find((item) => item.id === current.id)
+  if (!note) return
+  try {
+    await api('?id=eq.' + note.id, { method: 'PATCH', body: { tilt: note.tilt } })
+  } catch (err) {
+    showError('That turn did not save.')
+  }
+}
+
+function onRotatePointer(event) {
+  pointerScreen.x = event.clientX
+  pointerScreen.y = event.clientY
+  if (!keys.has('r') || drag) return
+  let note = rotate && notes.find((item) => item.id === rotate.id)
+  if (!note) {
+    const el = event.target.closest && event.target.closest('article.note')
+    note = (el && notes.find((item) => item.id === el.dataset.id)) || hovered
+    if (!note) return
+  }
+  applyMouseRotate(note, event.clientX, event.clientY)
+}
+
 function shownTilt(note) {
   if (drag && drag.id === note.id) return drag.tilt
   const remote = remoteDrags.get(note.id)
@@ -458,7 +519,7 @@ function layout() {
     if (!el) continue
     const spot = noteWorld(note)
     positionElement(el, spot.x, spot.y)
-    el.style.setProperty('--tilt', (isBoardNote(note) ? 0 : shownTilt(note)) + 'deg')
+    el.style.setProperty('--tilt', shownTilt(note) + 'deg')
     const where = el.querySelector('.where')
     if (where) where.textContent = Math.round(spot.x) + ', ' + Math.round(spot.y)
   }
@@ -710,9 +771,9 @@ function moveDrag(event) {
   if (!note) return
   drag.lastClientX = event.clientX
   drag.lastClientY = event.clientY
-  if (keys.has('r')) armRotate()
-  if (drag.rotating) {
-    drag.tilt = note.tilt
+  if (keys.has('r')) {
+    armRotate()
+    applyMouseRotate(note, event.clientX, event.clientY)
   } else {
     note.x = clamp(drag.startX + (event.clientX - drag.originX) / camera.zoom, -WORLD, WORLD)
     note.y = clamp(drag.startY + (event.clientY - drag.originY) / camera.zoom, -WORLD, WORLD)
@@ -849,6 +910,8 @@ function publishSoon() {
     publishTimer = 0
     if (!room) return
     const spot = pointer || { x: camera.x + 80, y: camera.y + 80 }
+    const movingId = (drag && drag.id) || (rotate && rotate.id) || null
+    const moving = movingId && notes.find((item) => item.id === movingId)
     room.send({
       type: 'broadcast',
       event: 'here',
@@ -859,10 +922,10 @@ function publishSoon() {
         text: input.value.slice(0, MAX_LENGTH),
         color,
         name: myName(),
-        dragId: drag ? drag.id : null,
-        dragX: drag ? drag.x : null,
-        dragY: drag ? drag.y : null,
-        dragTilt: drag ? drag.tilt : null,
+        dragId: movingId,
+        dragX: moving ? Number(moving.x) : null,
+        dragY: moving ? Number(moving.y) : null,
+        dragTilt: moving ? (drag && drag.id === moving.id ? drag.tilt : moving.tilt) : null,
       },
     })
   }, 70)
@@ -902,6 +965,8 @@ function onBoardPointerDown(event) {
 
 function onBoardPointerMove(event) {
   pointer = worldFromEvent(event)
+  pointerScreen.x = event.clientX
+  pointerScreen.y = event.clientY
   try {
     syncTip(event)
   } catch (err) {
@@ -1059,12 +1124,14 @@ window.addEventListener('keydown', (event) => {
   }
   if (key === 'r' || event.code === 'KeyR') {
     if (typing && !drag) return
-    keys.add('r')
-    if (drag) {
+    if (!event.repeat) {
+      keys.add('r')
       event.preventDefault()
-      armRotate()
+      const note = (drag && notes.find((item) => item.id === drag.id)) || hovered
+      if (note) beginMouseRotate(note)
+      window.addEventListener('pointermove', onRotatePointer)
     }
-    if (drag || typing) return
+    return
   }
   if (typing) return
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
@@ -1078,11 +1145,15 @@ window.addEventListener('keyup', (event) => {
   if (key === 'r' || event.code === 'KeyR') {
     keys.delete('r')
     disarmRotate()
+    window.removeEventListener('pointermove', onRotatePointer)
+    endMouseRotate()
   }
 })
 window.addEventListener('blur', () => {
   keys.clear()
   disarmRotate()
+  window.removeEventListener('pointermove', onRotatePointer)
+  endMouseRotate()
 })
 
 let lastFrame = performance.now()
@@ -1106,16 +1177,6 @@ function tick(now) {
     glideCamera(dt)
   } catch (err) {
     /* Zooming back out should not stop WASD. */
-  }
-  if (drag && keys.has('r')) {
-    const note = notes.find((item) => item.id === drag.id)
-    if (note && !isBoardNote(note)) {
-      armRotate()
-      note.tilt = wrapTilt((Number(note.tilt) || 0) + 140 * dt)
-      drag.tilt = note.tilt
-      layout()
-      publishSoon()
-    }
   }
   requestAnimationFrame(tick)
 }
