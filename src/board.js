@@ -484,7 +484,7 @@ function serverMessage(detail, fallback) {
 }
 
 function openTable() {
-  if (input.value.trim().toLowerCase() !== 'table please::::') return false
+  if (input.value.trim().toLowerCase() !== '/table') return false
   location.href = 'table.html'
   return true
 }
@@ -1594,7 +1594,7 @@ async function commitTextEdit(id) {
     box.value = note.body
     return
   }
-  if (body.toLowerCase() === 'table please::::') {
+  if (body.toLowerCase() === '/table') {
     location.href = 'table.html'
     return
   }
