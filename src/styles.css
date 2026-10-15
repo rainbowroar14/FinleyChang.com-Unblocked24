@@ -402,10 +402,6 @@ body.dragging-note * {
 }
 
 .coords {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  z-index: 10000;
   margin: 0;
   padding: 4px 8px;
   border-radius: 8px;
@@ -416,6 +412,51 @@ body.dragging-note * {
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   box-shadow: 0 6px 16px rgba(28, 25, 23, 0.08);
+}
+
+.dock {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2000000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#name-input {
+  width: 132px;
+  pointer-events: auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1c1917;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(28, 25, 23, 0.08);
+}
+
+#name-input::placeholder {
+  color: #a8a29e;
+}
+
+.peer-name {
+  position: absolute;
+  left: 18px;
+  top: -6px;
+  max-width: 140px;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #1c1917;
+  color: #fffef8;
+  font-family: Figtree, "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .tip {

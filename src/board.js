@@ -39,6 +39,7 @@ const camera = { x: 0, y: 0, zoom: 1 }
 const MIN_ZOOM = 0.2
 const MAX_ZOOM = 6
 const coordsEl = document.getElementById('coords')
+const nameInput = document.getElementById('name-input')
 const tip = document.getElementById('tip')
 const paintbar = document.getElementById('paintbar')
 const paintCoords = document.getElementById('paint-coords')
@@ -103,6 +104,16 @@ let strokeCursor = '1970-01-01T00:00:00+00:00'
 
 function isBoardNote(note) {
   return Boolean(note && KINDS[note.kind])
+}
+
+function shownName(value) {
+  const raw = String(value || '').trim().slice(0, 20)
+  if (!raw || hasBlockedWord(raw)) return 'Guest'
+  return raw
+}
+
+function myName() {
+  return shownName(nameInput.value)
 }
 
 function clientId() {
@@ -540,7 +551,7 @@ async function place(event) {
     return
   }
   if (drag || pan || editing) return
-  if (event.target.closest('article.note') || event.target.closest('.paintbar')) return
+  if (event.target.closest('article.note') || event.target.closest('.paintbar') || event.target.closest('.dock')) return
   if (KINDS[placeKind]) {
     placeSpecial(event)
     return
@@ -734,10 +745,13 @@ function ensurePeer(id) {
   el.className = 'peer'
   const cursor = document.createElement('span')
   cursor.className = 'peer-cursor'
+  const name = document.createElement('span')
+  name.className = 'peer-name'
+  name.textContent = 'Guest'
   const card = document.createElement('div')
   card.className = 'peer-card'
   card.hidden = true
-  el.append(cursor, card)
+  el.append(cursor, name, card)
   board.appendChild(el)
   const peer = { el, x: 0, y: 0, text: '', color: '#FFE566', at: 0 }
   peers.set(id, peer)
@@ -752,6 +766,8 @@ function applyPeer(payload) {
   peer.text = String(payload.text || '').slice(0, MAX_LENGTH)
   peer.color = payload.color || '#FFE566'
   peer.at = Date.now()
+  const shown = shownName(payload.name)
+  peer.el.querySelector('.peer-name').textContent = shown
   const card = peer.el.querySelector('.peer-card')
   const showCard = Boolean(peer.text) && !payload.dragId
   card.hidden = !showCard
@@ -786,6 +802,7 @@ function publishSoon() {
         y: spot.y,
         text: input.value.slice(0, MAX_LENGTH),
         color,
+        name: myName(),
         dragId: drag ? drag.id : null,
         dragX: drag ? drag.x : null,
         dragY: drag ? drag.y : null,
@@ -813,7 +830,7 @@ function connectLive() {
 
 function onBoardPointerDown(event) {
   if (event.button != null && event.button !== 0) return
-  if (event.target.closest('article.note, .paintbar, .coords')) return
+  if (event.target.closest('article.note, .paintbar, .dock')) return
   pan = {
     pointerId: event.pointerId,
     x: event.clientX,
@@ -903,6 +920,23 @@ document.getElementById('composer').addEventListener('submit', (event) => event.
 input.addEventListener('focus', () => {
   for (const key of ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']) keys.delete(key)
 })
+nameInput.addEventListener('focus', () => {
+  for (const key of ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']) keys.delete(key)
+})
+nameInput.addEventListener('keydown', (event) => event.stopPropagation())
+nameInput.addEventListener('input', () => {
+  if (nameInput.value.length > 20) nameInput.value = nameInput.value.slice(0, 20)
+  const raw = nameInput.value.trim().slice(0, 20)
+  if (raw && hasBlockedWord(raw)) {
+    showError('That name cannot be used.')
+    nameInput.value = localStorage.getItem('sticky-name') || ''
+    return
+  }
+  localStorage.setItem('sticky-name', raw)
+  showError('')
+  publishSoon()
+})
+nameInput.value = (localStorage.getItem('sticky-name') || '').slice(0, 20)
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
   const raw = input.value.trim().toLowerCase()
@@ -928,7 +962,7 @@ window.addEventListener('keydown', (event) => {
     exitEdit()
     return
   }
-  const typing = document.activeElement === input || (document.activeElement && document.activeElement.classList.contains('editbox'))
+  const typing = document.activeElement === input || document.activeElement === nameInput || (document.activeElement && document.activeElement.classList.contains('editbox'))
   if (document.activeElement === input && event.key === 'Tab') {
     const matches = commandMatches()
     if (matches.length) {
@@ -988,7 +1022,7 @@ function tick(now) {
   if (keys.has('s') || keys.has('arrowdown')) my += 1
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1
   if (keys.has('d') || keys.has('arrowright')) mx += 1
-  if ((mx || my) && document.activeElement !== input) {
+  if ((mx || my) && document.activeElement !== input && document.activeElement !== nameInput) {
     stopFollowing()
     camera.x += (mx * 760 * dt) / camera.zoom
     camera.y += (my * 760 * dt) / camera.zoom

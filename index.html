@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600;700&family=Patrick+Hand&family=Syne:wght@700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="src/styles.css?v=13" />
+    <link rel="stylesheet" href="src/styles.css?v=15" />
   </head>
   <body>
     <div class="app">
@@ -24,7 +24,10 @@
         <p class="hint" id="hint" hidden>The wall is empty. Stick the first note.</p>
         <div class="note ghost" id="ghost" hidden></div>
         <div id="peers"></div>
-        <p class="coords" id="coords">x 0 · y 0</p>
+        <div class="dock" id="dock">
+          <input id="name-input" maxlength="20" placeholder="Guest" aria-label="Your name" />
+          <p class="coords" id="coords">x 0 · y 0</p>
+        </div>
         <div class="paintbar" id="paintbar" hidden>
           <button type="button" class="ink on" data-ink="#1C1917" style="background:#1C1917" aria-label="Black"></button>
           <button type="button" class="ink" data-ink="#E11D48" style="background:#E11D48" aria-label="Red"></button>
@@ -54,6 +57,6 @@
       </form>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-    <script src="src/board.js?v=15"></script>
+    <script src="src/board.js?v=17"></script>
   </body>
 </html>
