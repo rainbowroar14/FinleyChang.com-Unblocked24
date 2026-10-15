@@ -76,7 +76,45 @@ const COMMANDS = [
   { cmd: '/lights', kind: 'lights' },
   { cmd: '/memory', kind: 'memo' },
   { cmd: '/table', kind: 'table' },
+  { cmd: '/circle', shape: 'circle', label: 'Circle' },
+  { cmd: '/star', shape: 'star', label: 'Star' },
+  { cmd: '/thought', shape: 'thought', label: 'Thought bubble' },
+  { cmd: '/talk', shape: 'talk', label: 'Talking bubble' },
+  { cmd: '/card', shape: 'card', label: 'Sticky note' },
 ]
+const SHAPE_NAMES = {
+  card: 'sticky note',
+  circle: 'circle',
+  star: 'star',
+  thought: 'thought bubble',
+  talk: 'talking bubble',
+}
+const SHAPE_ART = {
+  circle: {
+    box: '0 0 200 200',
+    parts: [{ tag: 'ellipse', attrs: { cx: '100', cy: '100', rx: '96', ry: '96' } }],
+  },
+  star: {
+    box: '0 0 100 100',
+    parts: [{ tag: 'polygon', attrs: { points: '50,3 63,36 98,36 70,57 81,97 50,74 19,97 30,57 2,36 37,36' } }],
+  },
+  thought: {
+    box: '0 0 200 170',
+    parts: [
+      { tag: 'ellipse', attrs: { cx: '100', cy: '70', rx: '88', ry: '56' } },
+      { tag: 'ellipse', attrs: { cx: '52', cy: '82', rx: '40', ry: '34' } },
+      { tag: 'ellipse', attrs: { cx: '150', cy: '80', rx: '38', ry: '32' } },
+      { tag: 'ellipse', attrs: { cx: '76', cy: '42', rx: '36', ry: '28' } },
+      { tag: 'ellipse', attrs: { cx: '128', cy: '40', rx: '34', ry: '26' } },
+      { tag: 'circle', attrs: { cx: '40', cy: '136', r: '14' } },
+      { tag: 'circle', attrs: { cx: '18', cy: '158', r: '8' } },
+    ],
+  },
+  talk: {
+    box: '0 0 200 160',
+    parts: [{ tag: 'path', attrs: { d: 'M28 8 H172 A16 16 0 0 1 188 24 V104 A16 16 0 0 1 172 120 H86 L52 152 L64 120 H28 A16 16 0 0 1 12 104 V24 A16 16 0 0 1 28 8 Z' } }],
+  },
+}
 let notes = []
 let color = COLORS[0]
 let drag = null
@@ -89,6 +127,9 @@ let blockPlace = false
 let room = null
 let publishTimer = 0
 let placeKind = 'text'
+let placeShape = 'card'
+let shaping = null
+let shapeTicket = 0
 let editing = null
 let savingPlay = null
 let flagMode = false
@@ -310,6 +351,7 @@ function paint(note) {
   el.style.zIndex = editing === note.id ? '1000000' : String(note.z)
   el.style.setProperty('--tilt', shownTilt(note) + 'deg')
   applyNoteBox(el, note)
+  applyShape(el, note)
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
   el.classList.toggle('writing', note.kind === 'text' && editing === note.id)
   const label = el.querySelector('.note-text')
@@ -341,7 +383,7 @@ function paint(note) {
 
 function noteSignature(list) {
   return list
-    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.sx, note.sy, note.kind, note.marks, note.state].join(':'))
+    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.sx, note.sy, note.kind, note.shape, note.marks, note.state].join(':'))
     .join('|')
 }
 
@@ -366,7 +408,7 @@ function render() {
 
 async function loadNotes() {
   try {
-    const data = await api('?select=id,body,color,x,y,z,tilt,sx,sy,kind,marks,state,created_at&order=z.asc&limit=800', {
+    const data = await api('?select=id,body,color,x,y,z,tilt,sx,sy,kind,shape,marks,state,created_at&order=z.asc&limit=800', {
       method: 'GET',
     })
     const held = drag && notes.find((note) => note.id === drag.id)
@@ -387,6 +429,11 @@ async function loadNotes() {
         next[index].sx = sizing.sx
         next[index].sy = sizing.sy
       }
+    }
+    if (shaping) {
+      const local = notes.find((note) => note.id === shaping)
+      const index = local && next.findIndex((note) => note.id === local.id)
+      if (index >= 0) next[index].shape = local.shape
     }
     if (open && savingPlay === open.id) {
       const index = next.findIndex((note) => note.id === open.id)
@@ -559,7 +606,7 @@ function updateComposer() {
   board.classList.toggle('armed', !slash && (Boolean(draft) || placeKind !== 'text'))
   const waiting = cooldownText()
   const spec = KINDS[placeKind]
-  const ghostLabel = slash ? '' : spec ? spec.label : draft
+  const shapeName = SHAPE_NAMES[placeShape] || 'sticky note'
   const nextHint = waiting
     ? waiting
     : slash
@@ -567,19 +614,12 @@ function updateComposer() {
       : spec
         ? spec.hint
         : draft
-          ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-          : 'Type / for a drawing, a game, or the table.'
+          ? 'Click the wall to stick this ' + shapeName + '.'
+          : placeShape !== 'card'
+            ? 'Type the note. It will be a ' + shapeName + '. /card makes a normal sticky note.'
+            : 'Type / for a shape, a drawing, a game, or the table.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
-  const showGhost = Boolean(ghostLabel)
-  ghost.classList.toggle('special', placeKind !== 'text')
-  ghost.classList.toggle('table', placeKind === 'table')
-  if (ghost.hidden === showGhost) ghost.hidden = !showGhost
-  if (showGhost && ghost.textContent !== ghostLabel) ghost.textContent = ghostLabel
-  if (showGhost) {
-    ghost.style.background = color
-    ghost.style.color = textOn(color)
-    if (pointer) positionElement(ghost, pointer.x, pointer.y)
-  }
+  syncGhost()
   publishSoon()
 }
 
@@ -636,8 +676,37 @@ function commandMatches() {
   return COMMANDS.filter((item) => item.cmd.startsWith(raw))
 }
 
+function commandTitle(item) {
+  const name = item.label || (KINDS[item.kind] && KINDS[item.kind].label) || item.cmd
+  if (item.shape && textUnderPointer()) return item.cmd + '  make this a ' + name.toLowerCase()
+  return item.cmd + '  ' + name
+}
+
+function textUnderPointer() {
+  const hit = document.elementFromPoint(pointerScreen.x, pointerScreen.y)
+  const el = hit && hit.closest && hit.closest('article.note')
+  const note = el && notes.find((item) => item.id === el.dataset.id)
+  if (!note || (note.kind && note.kind !== 'text')) return null
+  return note
+}
+
 function chooseCommand(item) {
-  placeKind = item.kind
+  const pointed = item.shape ? textUnderPointer() : null
+  if (pointed) {
+    pointed.shape = item.shape
+    const el = noteNodes.get(pointed.id)
+    if (el) {
+      applyNoteBox(el, pointed)
+      applyShape(el, pointed)
+    }
+    saveShape(pointed)
+  } else if (item.shape) {
+    placeShape = item.shape
+    placeKind = 'text'
+  } else {
+    placeKind = item.kind
+    placeShape = 'card'
+  }
   input.value = ''
   renderSuggest([])
   updateComposer()
@@ -654,7 +723,7 @@ function renderSuggest(matches) {
   matches.forEach((item, index) => {
     const row = document.createElement('li')
     if (index === 0) row.className = 'top'
-    row.textContent = item.cmd + '  ' + KINDS[item.kind].label
+    row.textContent = commandTitle(item)
     row.addEventListener('pointerdown', (event) => {
       event.preventDefault()
       chooseCommand(item)
@@ -697,6 +766,7 @@ async function place(event) {
     y: spot.y,
     z: nextZ(),
     tilt: Math.round(Math.random() * 8 - 4),
+    shape: placeShape,
     client_id: clientId(),
   }
   try {
@@ -815,6 +885,10 @@ async function finishDrag(event) {
 function noteBase(note) {
   if (note.kind === 'table') return { w: 760, h: 470 }
   if (note.kind === 'draw' || note.kind === 'game' || note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') return { w: 256, h: 256 }
+  const shape = noteShape(note)
+  if (shape === 'circle' || shape === 'star') return { w: 220, h: 220 }
+  if (shape === 'thought') return { w: 250, h: 212 }
+  if (shape === 'talk') return { w: 260, h: 208 }
   return { w: 230, h: 148 }
 }
 
@@ -822,6 +896,11 @@ function noteScale(note) {
   const sx = clamp(Number(note.sx) || 1, 0.1, 3)
   const sy = clamp(Number(note.sy) || 1, 0.1, 3)
   if (note.kind && note.kind !== 'text') return { sx, sy: sx }
+  const shape = noteShape(note)
+  if (shape === 'circle' || shape === 'star') {
+    const s = (sx + sy) / 2
+    return { sx: s, sy: s }
+  }
   return { sx, sy }
 }
 
@@ -832,6 +911,86 @@ function applyNoteBox(el, note) {
   el.style.height = base.h * scale.sy + 'px'
   el.style.minHeight = '0'
   if (!note.kind || note.kind === 'text') el.style.fontSize = '24px'
+}
+
+function noteShape(note) {
+  if (note.kind && note.kind !== 'text') return 'card'
+  if (note.shape === 'card' || SHAPE_ART[note.shape]) return note.shape
+  return 'card'
+}
+
+function applyShape(el, note) {
+  const shape = noteShape(note)
+  el.classList.toggle('shape-circle', shape === 'circle')
+  el.classList.toggle('shape-star', shape === 'star')
+  el.classList.toggle('shape-thought', shape === 'thought')
+  el.classList.toggle('shape-talk', shape === 'talk')
+  const skin = ensureSkin(el, shape)
+  if (shape === 'card') {
+    el.style.background = note.color
+    el.style.boxShadow = ''
+    if (skin) skin.remove()
+    return
+  }
+  el.style.background = 'transparent'
+  el.style.boxShadow = 'none'
+  skin.style.color = note.color
+}
+
+function ensureSkin(el, shape) {
+  let skin = el.querySelector('.skin')
+  const art = SHAPE_ART[shape]
+  if (!art) return skin
+  if (!skin) {
+    skin = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    skin.setAttribute('class', 'skin')
+    skin.setAttribute('aria-hidden', 'true')
+    el.insertBefore(skin, el.firstChild)
+  }
+  skin.setAttribute('viewBox', art.box)
+  skin.setAttribute('preserveAspectRatio', 'none')
+  if (skin.dataset.shape !== shape) {
+    skin.replaceChildren()
+    for (const part of art.parts) {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', part.tag)
+      node.setAttribute('fill', 'currentColor')
+      for (const [key, value] of Object.entries(part.attrs)) node.setAttribute(key, value)
+      skin.appendChild(node)
+    }
+    skin.dataset.shape = shape
+  }
+  return skin
+}
+
+async function saveShape(note) {
+  const ticket = ++shapeTicket
+  shaping = note.id
+  try {
+    await api('?id=eq.' + note.id, { method: 'PATCH', body: { shape: note.shape } })
+    showError('')
+  } catch (err) {
+    showError('That shape did not save.')
+  } finally {
+    if (ticket === shapeTicket && shaping === note.id) shaping = null
+  }
+}
+
+function syncGhost() {
+  const slash = input.value.trim().startsWith('/')
+  const spec = KINDS[placeKind]
+  const label = slash ? '' : spec ? spec.label : input.value.trim()
+  const show = Boolean(label)
+  ghost.classList.toggle('special', placeKind !== 'text')
+  ghost.classList.toggle('table', placeKind === 'table')
+  ghost.hidden = !show
+  const text = ghost.querySelector('.note-text')
+  if (text && text.textContent !== label) text.textContent = label
+  if (!show) return
+  const preview = { kind: placeKind === 'text' ? 'text' : placeKind, shape: placeKind === 'text' ? placeShape : 'card', color, sx: 1, sy: 1 }
+  ghost.style.color = textOn(color)
+  applyNoteBox(ghost, preview)
+  applyShape(ghost, preview)
+  if (pointer) positionElement(ghost, pointer.x, pointer.y)
 }
 
 function makeHandles() {
@@ -897,7 +1056,8 @@ function moveResize(event) {
   if (dir.includes('w')) sx = resize.sx - (2 * lx) / base.w
   if (dir.includes('s')) sy = resize.sy + (2 * ly) / base.h
   if (dir.includes('n')) sy = resize.sy - (2 * ly) / base.h
-  if (note.kind && note.kind !== 'text') {
+  const shape = noteShape(note)
+  if ((note.kind && note.kind !== 'text') || shape === 'circle' || shape === 'star') {
     const s = dir === 'n' || dir === 's' ? sy : dir === 'e' || dir === 'w' ? sx : (sx + sy) / 2
     sx = s
     sy = s
@@ -1119,14 +1279,7 @@ function onBoardPointerMove(event) {
   } catch (err) {
     /* A tooltip problem should not stop the wall from moving. */
   }
-  if (!input.value.trim().startsWith('/') && (input.value.trim() || placeKind !== 'text')) {
-    ghost.hidden = false
-    ghost.classList.toggle('special', placeKind !== 'text')
-    ghost.classList.toggle('table', placeKind === 'table')
-    ghost.textContent = KINDS[placeKind] ? KINDS[placeKind].label : input.value.trim()
-    ghost.style.background = color
-    ghost.style.color = textOn(color)
-  }
+  if (!input.value.trim().startsWith('/') && (input.value.trim() || placeKind !== 'text')) syncGhost()
   if (pan && pan.pointerId === event.pointerId) {
     const dx = event.clientX - pan.x
     const dy = event.clientY - pan.y
@@ -1154,6 +1307,10 @@ function onBoardPointerUp(event) {
 
 board.addEventListener('pointerdown', onBoardPointerDown)
 board.addEventListener('pointermove', onBoardPointerMove)
+window.addEventListener('pointermove', (event) => {
+  pointerScreen.x = event.clientX
+  pointerScreen.y = event.clientY
+})
 board.addEventListener('pointerup', onBoardPointerUp)
 board.addEventListener('pointercancel', onBoardPointerUp)
 board.addEventListener('pointerleave', () => {
@@ -1348,6 +1505,8 @@ function syncTip(event) {
           : 'Press I to play'
   tip.style.left = event.clientX + 14 + 'px'
   tip.style.top = event.clientY + 18 + 'px'
+  const suggest = document.getElementById('suggest')
+  if (suggest && !suggest.hidden) renderSuggest(commandMatches())
 }
 
 function ensureWhere(el) {
