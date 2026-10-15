@@ -243,9 +243,15 @@ function paint(note) {
   } else if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') {
     label.hidden = true
     ensurePlay(el, note)
-  } else if (label.textContent !== note.body) {
-    label.hidden = false
-    label.textContent = note.body
+  } else if (label) {
+    const editingThis = editing === note.id
+    label.hidden = editingThis
+    if (label.textContent !== note.body) label.textContent = note.body
+    if (editingThis) openTextEdit(el, note)
+    else {
+      const box = el.querySelector('.editbox')
+      if (box) box.hidden = true
+    }
   }
 }
 
@@ -416,7 +422,7 @@ function updateComposer() {
       ? spec.hint
       : draft
         ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-        : 'Scroll to zoom. Coordinates follow your cursor. Press I on a drawing or a game.'
+        : 'Scroll to zoom. Press I on a note, drawing, or game.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   const showGhost = Boolean(ghostLabel)
   ghost.classList.toggle('special', placeKind !== 'text')
@@ -635,7 +641,7 @@ async function finishDrag(event) {
 function onNoteDown(event) {
   if (input.value.trim() || placeKind !== 'text') return
   const kind = notes.find((item) => item.id === event.currentTarget.dataset.id)
-  if (kind && editing === kind.id && isBoardNote(kind)) return
+  if (kind && editing === kind.id) return
   if (event.button != null && event.button !== 0) return
   const note = notes.find((item) => item.id === event.currentTarget.dataset.id)
   if (!note) return
@@ -865,9 +871,9 @@ window.addEventListener('keydown', (event) => {
     exitEdit()
     return
   }
-  const typing = document.activeElement === input
+  const typing = document.activeElement === input || (document.activeElement && document.activeElement.classList.contains('editbox'))
   if (!typing && (key === 'i' || event.code === 'KeyI')) {
-    if (hovered && isBoardNote(hovered)) {
+    if (hovered) {
       event.preventDefault()
       if (editing === hovered.id) exitEdit()
       else enterEdit(hovered)
@@ -945,13 +951,13 @@ function tick(now) {
 function syncTip(event) {
   const el = event.target.closest && event.target.closest('article.note')
   const note = el && notes.find((item) => item.id === el.dataset.id)
-  hovered = note && isBoardNote(note) ? note : null
+  hovered = note || null
   if (!hovered || editing === hovered.id) {
     tip.hidden = true
     return
   }
   tip.hidden = false
-  tip.textContent = hovered.kind === 'draw' ? 'Press I to draw' : 'Press I to play'
+  tip.textContent = hovered.kind === 'draw' ? 'Press I to draw' : hovered.kind === 'text' ? 'Press I to edit' : 'Press I to play'
   tip.style.left = event.clientX + 14 + 'px'
   tip.style.top = event.clientY + 18 + 'px'
 }
@@ -1524,13 +1530,19 @@ async function placeSpecial(event) {
 
 function stopFollowing() {
   if (!editing && !savedView) return
+  commitTextEdit()
   editing = null
   savedView = null
   board.classList.remove('editing')
   paintbar.hidden = true
   for (const note of notes) {
     const el = noteNodes.get(note.id)
-    if (el && (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo')) ensurePlay(el, note)
+    if (!el) continue
+    const box = el.querySelector('.editbox')
+    if (box) box.hidden = true
+    const label = el.querySelector('.note-text')
+    if (label && note.kind === 'text') label.hidden = false
+    if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') ensurePlay(el, note)
   }
 }
 
@@ -1543,12 +1555,85 @@ function enterEdit(note) {
   const el = noteNodes.get(note.id)
   if (el && note.kind === 'game') ensureGame(el, note)
   if (el && (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo')) ensurePlay(el, note)
+  if (el && note.kind === 'text') openTextEdit(el, note)
+}
+
+function openTextEdit(el, note) {
+  let box = el.querySelector('.editbox')
+  if (!box) {
+    box = document.createElement('textarea')
+    box.className = 'editbox'
+    box.maxLength = MAX_LENGTH
+    box.rows = 4
+    box.addEventListener('pointerdown', (event) => event.stopPropagation())
+    box.addEventListener('input', () => queueTextSave(el.dataset.id))
+    el.appendChild(box)
+  }
+  box.hidden = false
+  if (document.activeElement !== box) {
+    box.value = note.body
+    box.focus()
+  }
+}
+
+let textTimer = 0
+function queueTextSave(id) {
+  clearTimeout(textTimer)
+  textTimer = setTimeout(() => commitTextEdit(id), 280)
+}
+
+async function commitTextEdit(id) {
+  const noteId = id || editing
+  const note = notes.find((item) => item.id === noteId)
+  if (!note || note.kind !== 'text') return
+  const el = noteNodes.get(note.id)
+  const box = el && el.querySelector('.editbox')
+  if (!box) return
+  const body = box.value.trim().slice(0, MAX_LENGTH)
+  if (!body) {
+    box.value = note.body
+    return
+  }
+  if (body.toLowerCase() === 'table please::::') {
+    location.href = 'table.html'
+    return
+  }
+  if (body === note.body) return
+  if (hasBlockedWord(body)) {
+    showError('That word cannot go on the board.')
+    box.value = note.body
+    return
+  }
+  const previous = note.body
+  note.body = body
+  const label = el.querySelector('.note-text')
+  if (label) label.textContent = body
+  el.setAttribute('aria-label', body)
+  try {
+    await api('?id=eq.' + note.id, { method: 'PATCH', body: { body } })
+    showError('')
+  } catch (err) {
+    note.body = previous
+    if (label) label.textContent = previous
+    el.setAttribute('aria-label', previous)
+    box.value = previous
+    showError(serverMessage(err.message, 'That edit did not save.'))
+  }
 }
 
 function exitEdit() {
+  commitTextEdit()
+  const current = editing
   editing = null
   board.classList.remove('editing')
   paintbar.hidden = true
+  const currentEl = current && noteNodes.get(current)
+  if (currentEl) {
+    const box = currentEl.querySelector('.editbox')
+    if (box) box.hidden = true
+    const label = currentEl.querySelector('.note-text')
+    if (label && !currentEl.classList.contains('draw') && !currentEl.classList.contains('game') && !currentEl.classList.contains('mine') && !currentEl.classList.contains('lights') && !currentEl.classList.contains('memo')) label.hidden = false
+  }
   for (const note of notes) {
     const el = noteNodes.get(note.id)
     if (!el) continue

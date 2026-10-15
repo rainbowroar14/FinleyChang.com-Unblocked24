@@ -159,6 +159,22 @@ body.dragging-note * {
   display: block;
 }
 
+.note .editbox {
+  display: block;
+  width: 100%;
+  min-height: 108px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.2;
+  user-select: text;
+  cursor: text;
+}
+
 .trash {
   position: absolute;
   top: 6px;
