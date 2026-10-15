@@ -30,6 +30,7 @@ jobs:
           cp table.html site/table.html
           mkdir site/src
           cp src/board.js src/styles.css site/src/
+          cp maxwell.png site/maxwell.png
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

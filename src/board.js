@@ -68,6 +68,10 @@ const KINDS = {
     label: 'Table',
     hint: 'Click the wall to place the element table. Press I, then click an element to light it up.',
   },
+  maxwell: {
+    label: 'Maxwell',
+    hint: 'Click the wall to place Maxwell. Drag a handle to resize him.',
+  },
 }
 const COMMANDS = [
   { cmd: '/draw', kind: 'draw' },
@@ -76,6 +80,7 @@ const COMMANDS = [
   { cmd: '/lights', kind: 'lights' },
   { cmd: '/memory', kind: 'memo' },
   { cmd: '/table', kind: 'table' },
+  { cmd: '/maxwell', kind: 'maxwell' },
   { cmd: '/circle', shape: 'circle', label: 'Circle' },
   { cmd: '/star', shape: 'star', label: 'Star' },
   { cmd: '/thought', shape: 'thought', label: 'Thought bubble' },
@@ -134,6 +139,7 @@ let editing = null
 let savingPlay = null
 let flagMode = false
 let savedView = null
+let viewLock = false
 let hovered = null
 let ink = '#1C1917'
 let brush = 4
@@ -369,6 +375,9 @@ function paint(note) {
   } else if (note.kind === 'table') {
     label.hidden = true
     ensureTable(el, note)
+  } else if (note.kind === 'maxwell') {
+    label.hidden = true
+    syncCat(el, true)
   } else if (label) {
     const editingThis = editing === note.id
     label.hidden = editingThis
@@ -434,6 +443,10 @@ async function loadNotes() {
       const local = notes.find((note) => note.id === shaping)
       const index = local && next.findIndex((note) => note.id === local.id)
       if (index >= 0) next[index].shape = local.shape
+    }
+    if (open && (!open.kind || open.kind === 'text')) {
+      const index = next.findIndex((note) => note.id === open.id)
+      if (index >= 0) next[index].body = open.body
     }
     if (open && savingPlay === open.id) {
       const index = next.findIndex((note) => note.id === open.id)
@@ -884,6 +897,7 @@ async function finishDrag(event) {
 
 function noteBase(note) {
   if (note.kind === 'table') return { w: 760, h: 470 }
+  if (note.kind === 'maxwell') return { w: 320, h: 320 }
   if (note.kind === 'draw' || note.kind === 'game' || note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') return { w: 256, h: 256 }
   const shape = noteShape(note)
   if (shape === 'circle' || shape === 'star') return { w: 220, h: 220 }
@@ -926,6 +940,12 @@ function applyShape(el, note) {
   el.classList.toggle('shape-thought', shape === 'thought')
   el.classList.toggle('shape-talk', shape === 'talk')
   const skin = ensureSkin(el, shape)
+  if (note.kind === 'maxwell') {
+    el.style.background = 'transparent'
+    el.style.boxShadow = 'none'
+    if (skin) skin.remove()
+    return
+  }
   if (shape === 'card') {
     el.style.background = note.color
     el.style.boxShadow = ''
@@ -975,6 +995,21 @@ async function saveShape(note) {
   }
 }
 
+function syncCat(el, on) {
+  let img = el.querySelector('img.cat')
+  if (!on) {
+    if (img) img.remove()
+    return
+  }
+  if (img) return
+  img = document.createElement('img')
+  img.className = 'cat'
+  img.alt = 'Maxwell'
+  img.draggable = false
+  img.src = 'maxwell.png'
+  el.appendChild(img)
+}
+
 function syncGhost() {
   const slash = input.value.trim().startsWith('/')
   const spec = KINDS[placeKind]
@@ -982,9 +1017,14 @@ function syncGhost() {
   const show = Boolean(label)
   ghost.classList.toggle('special', placeKind !== 'text')
   ghost.classList.toggle('table', placeKind === 'table')
+  ghost.classList.toggle('maxwell', placeKind === 'maxwell')
   ghost.hidden = !show
   const text = ghost.querySelector('.note-text')
-  if (text && text.textContent !== label) text.textContent = label
+  if (text) {
+    text.hidden = placeKind === 'maxwell'
+    if (text.textContent !== label) text.textContent = label
+  }
+  syncCat(ghost, placeKind === 'maxwell')
   if (!show) return
   const preview = { kind: placeKind === 'text' ? 'text' : placeKind, shape: placeKind === 'text' ? placeShape : 'card', color, sx: 1, sy: 1 }
   ghost.style.color = textOn(color)
@@ -1336,6 +1376,7 @@ window.addEventListener(
     camera.x = sx / oldZoom + camera.x - sx / next
     camera.y = sy / oldZoom + camera.y - sy / next
     camera.zoom = next
+    if (editing) viewLock = true
     pointer = worldFromEvent(event)
     layout()
   },
@@ -1415,6 +1456,7 @@ window.addEventListener('keydown', (event) => {
   }
   if (!typing && (key === 'i' || event.code === 'KeyI')) {
     if (hovered) {
+      if (hovered.kind === 'maxwell') return
       event.preventDefault()
       if (editing === hovered.id) exitEdit()
       else enterEdit(hovered)
@@ -1470,7 +1512,8 @@ function tick(now) {
   if (keys.has('s') || keys.has('arrowdown')) my += 1
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1
   if (keys.has('d') || keys.has('arrowright')) mx += 1
-  if ((mx || my) && document.activeElement !== input && document.activeElement !== nameInput) {
+  const typingNow = document.activeElement === input || document.activeElement === nameInput || (document.activeElement && document.activeElement.classList.contains('editbox'))
+  if ((mx || my) && !typingNow) {
     stopFollowing()
     camera.x += (mx * 760 * dt) / camera.zoom
     camera.y += (my * 760 * dt) / camera.zoom
@@ -1496,7 +1539,9 @@ function syncTip(event) {
   }
   tip.hidden = false
   tip.textContent =
-    hovered.kind === 'draw'
+    hovered.kind === 'maxwell'
+      ? 'Drag a handle to resize'
+      : hovered.kind === 'draw'
       ? 'Press I to draw'
       : hovered.kind === 'text'
         ? 'Press I to edit'
@@ -2203,7 +2248,7 @@ async function placeSpecial(event) {
     showError('')
     updateComposer()
     render()
-    enterEdit(note)
+    if (kind !== 'maxwell') enterEdit(note)
   } catch (err) {
     const message = serverMessage(err.message, 'That note did not stick. Wait 3 seconds and try again.')
     if (/wait|second|minute/i.test(message)) markWait(ADD_WAIT)
@@ -2217,6 +2262,7 @@ function stopFollowing() {
   commitTextEdit()
   editing = null
   savedView = null
+  viewLock = false
   board.classList.remove('editing')
   paintbar.hidden = true
   for (const note of notes) {
@@ -2233,7 +2279,9 @@ function stopFollowing() {
 }
 
 function enterEdit(note) {
+  if (note.kind === 'maxwell') return
   if (!savedView) savedView = { x: camera.x, y: camera.y, zoom: camera.zoom }
+  viewLock = false
   editing = note.id
   board.classList.add('editing')
   paintbar.hidden = note.kind !== 'draw'
@@ -2262,8 +2310,8 @@ function openTextEdit(el, note) {
   mark.hidden = false
   box.hidden = false
   if (document.activeElement !== box) {
-    box.value = note.body
-    box.focus()
+    if (box.value !== note.body) box.value = note.body
+    box.focus({ preventScroll: true })
     const end = box.value.length
     box.setSelectionRange(end, end)
   }
@@ -2314,6 +2362,7 @@ function exitEdit() {
   commitTextEdit()
   const current = editing
   editing = null
+  viewLock = false
   board.classList.remove('editing')
   paintbar.hidden = true
   const currentEl = current && noteNodes.get(current)
@@ -2334,6 +2383,7 @@ function exitEdit() {
 }
 
 function glideCamera(dt) {
+  if (editing && viewLock) return
   let target = null
   if (editing) {
     const note = notes.find((item) => item.id === editing)
@@ -2342,15 +2392,27 @@ function glideCamera(dt) {
       return
     }
     const rect = board.getBoundingClientRect()
+    const box = noteBase(note)
+    const scale = noteScale(note)
+    const w = box.w * scale.sx
+    const h = box.h * scale.sy
     const zoom = note.kind === 'table'
-      ? clamp(Math.min((rect.width * 0.92) / 780, (rect.height * 0.86) / 500), 0.35, MAX_ZOOM)
+      ? clamp(Math.min((rect.width * 0.92) / w, (rect.height * 0.86) / h), 0.35, MAX_ZOOM)
       : note.kind === 'text'
-        ? clamp(Math.min((rect.width * 0.42) / 230, (rect.height * 0.42) / 170), 1.4, 2.15)
-        : clamp((Math.min(rect.width, rect.height) * 0.82) / 256, 1.15, MAX_ZOOM)
+        ? clamp(Math.min((rect.width * 0.42) / w, (rect.height * 0.42) / h), 1.4, 2.15)
+        : clamp((Math.min(rect.width, rect.height) * 0.82) / Math.max(w, h), 1.15, MAX_ZOOM)
     target = {
-      x: note.x - rect.width / (2 * zoom),
-      y: note.y - rect.height / (2 * zoom),
+      x: Number(note.x) - rect.width / (2 * zoom),
+      y: Number(note.y) - rect.height / (2 * zoom),
       zoom,
+    }
+    if (note.kind === 'text' || !note.kind) {
+      camera.x = target.x
+      camera.y = target.y
+      camera.zoom = target.zoom
+      viewLock = true
+      layout()
+      return
     }
   } else if (savedView) {
     target = savedView
@@ -2362,11 +2424,12 @@ function glideCamera(dt) {
   camera.y += (target.y - camera.y) * step
   camera.zoom += (target.zoom - camera.zoom) * step
   layout()
-  if (!editing && Math.hypot(camera.x - target.x, camera.y - target.y) < 2 && Math.abs(camera.zoom - target.zoom) < 0.02) {
+  if (Math.hypot(camera.x - target.x, camera.y - target.y) < 1 && Math.abs(camera.zoom - target.zoom) < 0.01) {
     camera.x = target.x
     camera.y = target.y
     camera.zoom = target.zoom
-    savedView = null
+    if (editing) viewLock = true
+    else savedView = null
     layout()
   }
 }
