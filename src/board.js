@@ -263,6 +263,27 @@ function positionElement(el, worldX, worldY) {
   el.style.top = (worldY - camera.y) * camera.zoom + 'px'
 }
 
+function wrapTilt(value) {
+  let angle = Math.round(value) % 360
+  if (angle > 180) angle -= 360
+  if (angle < -180) angle += 360
+  return angle
+}
+
+function shortestDegrees(from, to) {
+  let delta = to - from
+  while (delta > 180) delta -= 360
+  while (delta < -180) delta += 360
+  return delta
+}
+
+function shownTilt(note) {
+  if (drag && drag.id === note.id) return drag.tilt
+  const remote = remoteDrags.get(note.id)
+  if (remote && remote.tilt != null && Date.now() - remote.at < 1500) return remote.tilt
+  return Number(note.tilt) || 0
+}
+
 function noteWorld(note) {
   if (drag && drag.id === note.id) return { x: drag.x, y: drag.y }
   const remote = remoteDrags.get(note.id)
@@ -280,6 +301,7 @@ function layout() {
     if (!el) continue
     const spot = noteWorld(note)
     positionElement(el, spot.x, spot.y)
+    el.style.setProperty('--tilt', shownTilt(note) + 'deg')
   }
   if (pointer && input.value.trim()) positionElement(ghost, pointer.x, pointer.y)
   const now = Date.now()
@@ -314,7 +336,7 @@ function updateComposer() {
     ? waiting
     : draft
       ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-      : '10 seconds between notes, and 10 seconds between deletes. WASD, drag, or scroll to zoom.'
+      : 'WASD, drag, or scroll to zoom. Hold R while dragging a note to turn it.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   const showGhost = Boolean(draft)
   if (ghost.hidden === showGhost) ghost.hidden = !showGhost
@@ -455,14 +477,60 @@ async function removeNote(id) {
   }
 }
 
+function armRotate() {
+  if (!drag || drag.rotating) return
+  drag.rotating = true
+  drag.lastAngle = null
+  document.body.classList.add('rotating-note')
+}
+
+function disarmRotate() {
+  if (!drag || !drag.rotating) return
+  drag.rotating = false
+  drag.lastAngle = null
+  drag.originX = drag.lastClientX
+  drag.originY = drag.lastClientY
+  drag.startX = drag.x
+  drag.startY = drag.y
+  document.body.classList.remove('rotating-note')
+}
+
+function turnNote(event, note) {
+  const rect = board.getBoundingClientRect()
+  const centerX = rect.left + (note.x - camera.x) * camera.zoom
+  const centerY = rect.top + (note.y - camera.y) * camera.zoom
+  const dx = event.clientX - centerX
+  const dy = event.clientY - centerY
+  if (Math.hypot(dx, dy) < 36) {
+    const spin = (event.clientX - drag.spinX) * 0.55
+    note.tilt = wrapTilt((Number(note.tilt) || 0) + spin)
+    drag.lastAngle = null
+  } else {
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+    if (drag.lastAngle == null) drag.lastAngle = angle
+    note.tilt = wrapTilt((Number(note.tilt) || 0) + shortestDegrees(drag.lastAngle, angle))
+    drag.lastAngle = angle
+  }
+  drag.spinX = event.clientX
+  drag.tilt = note.tilt
+}
+
 function moveDrag(event) {
   if (!drag || event.pointerId !== drag.pointerId) return
   const note = notes.find((item) => item.id === drag.id)
   if (!note) return
-  note.x = clamp(drag.startX + (event.clientX - drag.originX) / camera.zoom, -WORLD, WORLD)
-  note.y = clamp(drag.startY + (event.clientY - drag.originY) / camera.zoom, -WORLD, WORLD)
-  drag.x = note.x
-  drag.y = note.y
+  drag.lastClientX = event.clientX
+  drag.lastClientY = event.clientY
+  if (keys.has('r')) armRotate()
+  if (drag.rotating) {
+    turnNote(event, note)
+  } else {
+    note.x = clamp(drag.startX + (event.clientX - drag.originX) / camera.zoom, -WORLD, WORLD)
+    note.y = clamp(drag.startY + (event.clientY - drag.originY) / camera.zoom, -WORLD, WORLD)
+    drag.x = note.x
+    drag.y = note.y
+    drag.lastAngle = null
+  }
   pointer = worldFromEvent(event)
   layout()
   publishSoon()
@@ -473,6 +541,7 @@ async function finishDrag(event) {
   const saved = drag
   drag = null
   document.body.classList.remove('dragging-note')
+  document.body.classList.remove('rotating-note')
   window.removeEventListener('pointermove', moveDrag)
   window.removeEventListener('pointerup', finishDrag)
   window.removeEventListener('pointercancel', finishDrag)
@@ -483,7 +552,7 @@ async function finishDrag(event) {
   try {
     await api('?id=eq.' + saved.id, {
       method: 'PATCH',
-      body: { x: saved.x, y: saved.y, z: saved.z },
+      body: { x: saved.x, y: saved.y, z: saved.z, tilt: saved.tilt },
     })
     showError('')
   } catch (err) {
@@ -514,7 +583,14 @@ function onNoteDown(event) {
     x: note.x,
     y: note.y,
     z: note.z,
+    tilt: Number(note.tilt) || 0,
+    lastClientX: event.clientX,
+    lastClientY: event.clientY,
+    spinX: event.clientX,
+    rotating: false,
+    lastAngle: null,
   }
+  if (keys.has('r')) armRotate()
   document.body.classList.add('dragging-note')
   window.addEventListener('pointermove', moveDrag)
   window.addEventListener('pointerup', finishDrag)
@@ -564,6 +640,7 @@ function applyPeer(payload) {
     remoteDrags.set(payload.dragId, {
       x: Number(payload.dragX),
       y: Number(payload.dragY),
+      tilt: payload.dragTilt == null ? null : Number(payload.dragTilt),
       at: Date.now(),
     })
   }
@@ -588,6 +665,7 @@ function publishSoon() {
         dragId: drag ? drag.id : null,
         dragX: drag ? drag.x : null,
         dragY: drag ? drag.y : null,
+        dragTilt: drag ? drag.tilt : null,
       },
     })
   }, 70)
@@ -686,15 +764,27 @@ input.addEventListener('input', () => {
 })
 
 window.addEventListener('keydown', (event) => {
-  if (document.activeElement === input) return
   const key = event.key.toLowerCase()
+  if (key === 'r') {
+    if (drag) {
+      event.preventDefault()
+      keys.add('r')
+      armRotate()
+      return
+    }
+    if (document.activeElement !== input) keys.add('r')
+    return
+  }
+  if (document.activeElement === input) return
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
     keys.add(key)
     event.preventDefault()
   }
 })
 window.addEventListener('keyup', (event) => {
-  keys.delete(event.key.toLowerCase())
+  const key = event.key.toLowerCase()
+  keys.delete(key)
+  if (key === 'r') disarmRotate()
 })
 window.addEventListener('blur', () => keys.clear())
 
