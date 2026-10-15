@@ -527,15 +527,7 @@ function layout() {
   const coordText = 'x ' + Math.round(here.x) + ' · y ' + Math.round(here.y)
   if (coordsEl.textContent !== coordText) coordsEl.textContent = coordText
   if (pointer && (input.value.trim() || placeKind !== 'text')) positionElement(ghost, pointer.x, pointer.y)
-  const now = Date.now()
-  for (const [id, peer] of peers) {
-    if (now - peer.at > 2500) {
-      peer.el.remove()
-      peers.delete(id)
-      continue
-    }
-    positionElement(peer.el, peer.x, peer.y)
-  }
+  placePeers()
 }
 
 function cooldownText() {
@@ -878,11 +870,23 @@ function ensurePeer(id) {
 function applyPeer(payload) {
   if (!payload || !payload.id || payload.id === clientId()) return
   const peer = ensurePeer(payload.id)
-  peer.x = Number(payload.x) || 0
-  peer.y = Number(payload.y) || 0
+  const x = Number(payload.x) || 0
+  const y = Number(payload.y) || 0
+  const now = Date.now()
+  const dist = Math.hypot(x - peer.x, y - peer.y)
+  const dt = (now - peer.at) / 1000
+  if (peer.at && dt > 0 && dt < 0.4 && dist < 800) {
+    peer.vx = (x - peer.x) / dt
+    peer.vy = (y - peer.y) / dt
+  } else {
+    peer.vx = 0
+    peer.vy = 0
+  }
+  peer.x = x
+  peer.y = y
   peer.text = String(payload.text || '').slice(0, MAX_LENGTH)
   peer.color = payload.color || '#FFE566'
-  peer.at = Date.now()
+  peer.at = now
   peer.name = shownName(payload.name)
   peer.el.querySelector('.peer-name').textContent = peer.name
   const card = peer.el.querySelector('.peer-card')
@@ -904,31 +908,60 @@ function applyPeer(payload) {
   layout()
 }
 
+let lastCursorSend = 0
+
+function placePeers(now = Date.now()) {
+  for (const [id, peer] of peers) {
+    if (now - peer.at > 2500) {
+      peer.el.remove()
+      peers.delete(id)
+      continue
+    }
+    const ahead = Math.min(Math.max(0, now - peer.at), 50)
+    positionElement(peer.el, peer.x + (peer.vx || 0) * ahead / 1000, peer.y + (peer.vy || 0) * ahead / 1000)
+  }
+}
+
+function sendCursor() {
+  if (!room) return
+  lastCursorSend = performance.now()
+  const spot = pointer || { x: camera.x + 80, y: camera.y + 80 }
+  const movingId = (drag && drag.id) || (rotate && rotate.id) || null
+  const moving = movingId && notes.find((item) => item.id === movingId)
+  room.send({
+    type: 'broadcast',
+    event: 'here',
+    payload: {
+      id: clientId(),
+      x: spot.x,
+      y: spot.y,
+      text: input.value.slice(0, MAX_LENGTH),
+      color,
+      name: myName(),
+      dragId: movingId,
+      dragX: moving ? Number(moving.x) : null,
+      dragY: moving ? Number(moving.y) : null,
+      dragTilt: moving ? (drag && drag.id === moving.id ? drag.tilt : moving.tilt) : null,
+    },
+  })
+}
+
 function publishSoon() {
-  if (publishTimer || !room) return
+  if (!room) return
+  const wait = 16 - (performance.now() - lastCursorSend)
+  if (wait <= 0) {
+    if (publishTimer) {
+      clearTimeout(publishTimer)
+      publishTimer = 0
+    }
+    sendCursor()
+    return
+  }
+  if (publishTimer) return
   publishTimer = window.setTimeout(() => {
     publishTimer = 0
-    if (!room) return
-    const spot = pointer || { x: camera.x + 80, y: camera.y + 80 }
-    const movingId = (drag && drag.id) || (rotate && rotate.id) || null
-    const moving = movingId && notes.find((item) => item.id === movingId)
-    room.send({
-      type: 'broadcast',
-      event: 'here',
-      payload: {
-        id: clientId(),
-        x: spot.x,
-        y: spot.y,
-        text: input.value.slice(0, MAX_LENGTH),
-        color,
-        name: myName(),
-        dragId: movingId,
-        dragX: moving ? Number(moving.x) : null,
-        dragY: moving ? Number(moving.y) : null,
-        dragTilt: moving ? (drag && drag.id === moving.id ? drag.tilt : moving.tilt) : null,
-      },
-    })
-  }, 70)
+    sendCursor()
+  }, wait)
 }
 
 function connectLive() {
@@ -1178,6 +1211,7 @@ function tick(now) {
   } catch (err) {
     /* Zooming back out should not stop WASD. */
   }
+  placePeers()
   requestAnimationFrame(tick)
 }
 
