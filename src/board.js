@@ -540,7 +540,7 @@ function ensurePeer(id) {
 }
 
 function applyPeer(payload) {
-  if (!payload || payload.id === clientId()) return
+  if (!payload || !payload.id || payload.id === clientId()) return
   const peer = ensurePeer(payload.id)
   peer.x = Number(payload.x) || 0
   peer.y = Number(payload.y) || 0
@@ -592,8 +592,11 @@ function connectLive() {
   const lib = window.supabase
   if (!lib || !lib.createClient) return
   const client = lib.createClient('https://pntixrcmuhorvpcrhmim.supabase.co', KEY)
-  room = client.channel('wall-cursors')
-  room.on('broadcast', { event: 'here' }, ({ payload }) => applyPeer(payload))
+  room = client.channel('wall-cursors', { config: { broadcast: { self: false } } })
+  room.on('broadcast', { event: 'here' }, (message) => {
+    const payload = message && message.payload && message.payload.id ? message.payload : message
+    applyPeer(payload)
+  })
   room.subscribe()
 }
 
