@@ -15,7 +15,7 @@
       <header class="topbar">
         <div>
           <p class="mark">Sticky Board</p>
-          <p class="tag">Up to 100 characters. Pick a color, click the wall, and drag any note over someone else’s.</p>
+          <p class="tag">WASD or drag the wall to move. Others can see your cursor and what you’re typing.</p>
         </div>
         <p class="status status-loading" id="status"><span class="dot"></span><span id="status-text">Connecting</span></p>
       </header>
@@ -23,6 +23,7 @@
       <div class="board" id="board">
         <p class="hint" id="hint" hidden>The wall is empty. Stick the first note.</p>
         <div class="note ghost" id="ghost" hidden></div>
+        <div id="peers"></div>
       </div>
 
       <form class="composer" id="composer">
@@ -36,6 +37,7 @@
         <p class="place-hint" id="place-hint">Write something, then click the wall. Drag a note to cover another one.</p>
       </form>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="src/board.js"></script>
   </body>
 </html>
