@@ -477,7 +477,14 @@ function serverMessage(detail, fallback) {
   return fallback
 }
 
+function openTable() {
+  if (input.value.trim().toLowerCase() !== 'table please::::') return false
+  location.href = 'table.html'
+  return true
+}
+
 async function place(event) {
+  if (openTable()) return
   if (blockPlace) {
     blockPlace = false
     return
@@ -846,6 +853,7 @@ input.addEventListener('focus', () => {
 })
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
+  if (openTable()) return
   if (input.value.trim()) placeKind = 'text'
   updateComposer()
 })

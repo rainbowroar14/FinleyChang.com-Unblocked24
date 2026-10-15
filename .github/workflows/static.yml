@@ -27,6 +27,7 @@ jobs:
         run: |
           mkdir site
           cp index.html site/index.html
+          cp table.html site/table.html
           mkdir site/src
           cp src/board.js src/styles.css site/src/
       - name: Setup Pages
