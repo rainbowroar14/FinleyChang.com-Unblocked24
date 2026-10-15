@@ -807,6 +807,9 @@ window.addEventListener(
   { passive: false },
 )
 document.getElementById('composer').addEventListener('submit', (event) => event.preventDefault())
+input.addEventListener('focus', () => {
+  for (const key of ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']) keys.delete(key)
+})
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
   if (input.value.trim()) placeKind = 'text'
@@ -820,7 +823,8 @@ window.addEventListener('keydown', (event) => {
     exitEdit()
     return
   }
-  if (key === 'i' || event.code === 'KeyI') {
+  const typing = document.activeElement === input
+  if (!typing && (key === 'i' || event.code === 'KeyI')) {
     if (hovered && (hovered.kind === 'draw' || hovered.kind === 'game')) {
       event.preventDefault()
       if (editing === hovered.id) exitEdit()
@@ -834,14 +838,15 @@ window.addEventListener('keydown', (event) => {
     }
   }
   if (key === 'r' || event.code === 'KeyR') {
+    if (typing && !drag) return
     keys.add('r')
     if (drag) {
       event.preventDefault()
       armRotate()
     }
-    if (drag || (document.activeElement === input && input.value.trim())) return
+    if (drag || typing) return
   }
-  if (document.activeElement === input && input.value.trim()) return
+  if (typing) return
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
     keys.add(key)
     event.preventDefault()
@@ -870,7 +875,7 @@ function tick(now) {
   if (keys.has('s') || keys.has('arrowdown')) my += 1
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1
   if (keys.has('d') || keys.has('arrowright')) mx += 1
-  if (mx || my) {
+  if ((mx || my) && document.activeElement !== input) {
     stopFollowing()
     camera.x += (mx * 760 * dt) / camera.zoom
     camera.y += (my * 760 * dt) / camera.zoom
