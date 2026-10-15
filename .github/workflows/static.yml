@@ -23,23 +23,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - name: Install and build
-        env:
-          GITHUB_PAGES: "true"
+      - name: Collect the page
         run: |
-          npm ci
-          npm run build
+          mkdir site
+          cp index.html site/index.html
+          mkdir site/src
+          cp src/board.js src/styles.css site/src/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
