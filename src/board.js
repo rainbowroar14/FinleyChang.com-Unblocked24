@@ -786,7 +786,10 @@ window.addEventListener('keyup', (event) => {
   keys.delete(key)
   if (key === 'r') disarmRotate()
 })
-window.addEventListener('blur', () => keys.clear())
+window.addEventListener('blur', () => {
+  keys.clear()
+  disarmRotate()
+})
 
 let lastFrame = performance.now()
 function tick(now) {
