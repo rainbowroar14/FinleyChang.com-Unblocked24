@@ -72,6 +72,24 @@ const KINDS = {
     label: 'Maxwell',
     hint: 'Click the wall to place Maxwell. Drag a handle to resize him.',
   },
+  sticker: {
+    label: 'Sticker',
+    hint: 'Click the wall to place the sticker. Drag a handle to resize it.',
+  },
+}
+const STICKERS = {
+  maxwell: 'maxwell.png',
+  doge: 'doge.png',
+  cheems: 'cheems.png',
+  pog: 'pog.png',
+  sadcat: 'sadcat.png',
+}
+const STICKER_LABELS = {
+  maxwell: 'Maxwell',
+  doge: 'Doge',
+  cheems: 'Cheems',
+  pog: 'Pog',
+  sadcat: 'Sad cat',
 }
 const COMMANDS = [
   { cmd: '/draw', kind: 'draw' },
@@ -80,7 +98,11 @@ const COMMANDS = [
   { cmd: '/lights', kind: 'lights' },
   { cmd: '/memory', kind: 'memo' },
   { cmd: '/table', kind: 'table' },
-  { cmd: '/maxwell', kind: 'maxwell' },
+  { cmd: '/maxwell', kind: 'maxwell', sticker: 'maxwell' },
+  { cmd: '/doge', kind: 'sticker', sticker: 'doge', label: 'Doge' },
+  { cmd: '/cheems', kind: 'sticker', sticker: 'cheems', label: 'Cheems' },
+  { cmd: '/pog', kind: 'sticker', sticker: 'pog', label: 'Pog' },
+  { cmd: '/sadcat', kind: 'sticker', sticker: 'sadcat', label: 'Sad cat' },
   { cmd: '/circle', shape: 'circle', label: 'Circle' },
   { cmd: '/star', shape: 'star', label: 'Star' },
   { cmd: '/thought', shape: 'thought', label: 'Thought bubble' },
@@ -132,6 +154,7 @@ let blockPlace = false
 let room = null
 let publishTimer = 0
 let placeKind = 'text'
+let placeSticker = ''
 let placeShape = 'card'
 let shaping = null
 let shapeTicket = 0
@@ -363,22 +386,27 @@ function paint(note) {
   const label = el.querySelector('.note-text')
   if (note.kind === 'draw') {
     label.hidden = true
+    syncSticker(el, '')
     ensureCanvas(el)
     ensureWhere(el)
     redrawNote(note.id)
   } else if (note.kind === 'game') {
     label.hidden = true
+    syncSticker(el, '')
     ensureGame(el, note)
   } else if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') {
     label.hidden = true
+    syncSticker(el, '')
     ensurePlay(el, note)
   } else if (note.kind === 'table') {
     label.hidden = true
     ensureTable(el, note)
-  } else if (note.kind === 'maxwell') {
+    syncSticker(el, '')
+  } else if (stickerOf(note)) {
     label.hidden = true
-    syncCat(el, true)
+    syncSticker(el, stickerOf(note))
   } else if (label) {
+    syncSticker(el, '')
     const editingThis = editing === note.id
     label.hidden = editingThis
     if (label.textContent !== note.body) label.textContent = note.body
@@ -625,7 +653,7 @@ function updateComposer() {
     : slash
       ? 'Press Tab to pick the top command.'
       : spec
-        ? spec.hint
+        ? (placeSticker ? 'Click the wall to place ' + (STICKER_LABELS[placeSticker] || 'it') + '. Drag a handle to resize.' : spec.hint)
         : draft
           ? 'Click the wall to stick this ' + shapeName + '.'
           : placeShape !== 'card'
@@ -716,8 +744,10 @@ function chooseCommand(item) {
   } else if (item.shape) {
     placeShape = item.shape
     placeKind = 'text'
+    placeSticker = ''
   } else {
     placeKind = item.kind
+    placeSticker = item.sticker || ''
     placeShape = 'card'
   }
   input.value = ''
@@ -897,7 +927,7 @@ async function finishDrag(event) {
 
 function noteBase(note) {
   if (note.kind === 'table') return { w: 760, h: 470 }
-  if (note.kind === 'maxwell') return { w: 320, h: 320 }
+  if (stickerOf(note)) return { w: 320, h: 320 }
   if (note.kind === 'draw' || note.kind === 'game' || note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') return { w: 256, h: 256 }
   const shape = noteShape(note)
   if (shape === 'circle' || shape === 'star') return { w: 220, h: 220 }
@@ -940,7 +970,7 @@ function applyShape(el, note) {
   el.classList.toggle('shape-thought', shape === 'thought')
   el.classList.toggle('shape-talk', shape === 'talk')
   const skin = ensureSkin(el, shape)
-  if (note.kind === 'maxwell') {
+  if (stickerOf(note)) {
     el.style.background = 'transparent'
     el.style.boxShadow = 'none'
     if (skin) skin.remove()
@@ -995,38 +1025,57 @@ async function saveShape(note) {
   }
 }
 
-function syncCat(el, on) {
+function stickerOf(note) {
+  if (!note) return ''
+  if (note.kind === 'maxwell') return 'maxwell'
+  const key = String(note.body || '').trim().toLowerCase()
+  if (note.kind === 'sticker' && STICKERS[key]) return key
+  return ''
+}
+
+function syncSticker(el, key) {
   let img = el.querySelector('img.cat')
-  if (!on) {
+  if (!key || !STICKERS[key]) {
     if (img) img.remove()
     return
   }
-  if (img) return
-  img = document.createElement('img')
-  img.className = 'cat'
-  img.alt = 'Maxwell'
-  img.draggable = false
-  img.src = 'maxwell.png'
-  el.appendChild(img)
+  if (!img) {
+    img = document.createElement('img')
+    img.className = 'cat'
+    img.alt = STICKER_LABELS[key] || 'Sticker'
+    img.draggable = false
+    el.appendChild(img)
+  }
+  if (img.getAttribute('src') !== STICKERS[key]) img.src = STICKERS[key]
+  img.alt = STICKER_LABELS[key] || 'Sticker'
 }
 
 function syncGhost() {
   const slash = input.value.trim().startsWith('/')
   const spec = KINDS[placeKind]
-  const label = slash ? '' : spec ? spec.label : input.value.trim()
+  const sticker = placeSticker && STICKERS[placeSticker] ? placeSticker : ''
+  const label = slash ? '' : sticker ? STICKER_LABELS[sticker] || 'Sticker' : spec ? spec.label : input.value.trim()
   const show = Boolean(label)
   ghost.classList.toggle('special', placeKind !== 'text')
   ghost.classList.toggle('table', placeKind === 'table')
-  ghost.classList.toggle('maxwell', placeKind === 'maxwell')
+  ghost.classList.toggle('maxwell', Boolean(sticker))
+  ghost.classList.toggle('sticker', Boolean(sticker))
   ghost.hidden = !show
   const text = ghost.querySelector('.note-text')
   if (text) {
-    text.hidden = placeKind === 'maxwell'
+    text.hidden = Boolean(sticker)
     if (text.textContent !== label) text.textContent = label
   }
-  syncCat(ghost, placeKind === 'maxwell')
+  syncSticker(ghost, sticker)
   if (!show) return
-  const preview = { kind: placeKind === 'text' ? 'text' : placeKind, shape: placeKind === 'text' ? placeShape : 'card', color, sx: 1, sy: 1 }
+  const preview = {
+    kind: placeKind === 'text' ? 'text' : placeKind,
+    body: sticker || label,
+    shape: placeKind === 'text' ? placeShape : 'card',
+    color,
+    sx: 1,
+    sy: 1,
+  }
   ghost.style.color = textOn(color)
   applyNoteBox(ghost, preview)
   applyShape(ghost, preview)
@@ -1185,7 +1234,12 @@ function ensurePeer(id) {
   const card = document.createElement('div')
   card.className = 'peer-card'
   card.hidden = true
-  el.append(cursor, name, card)
+  const pick = document.createElement('img')
+  pick.className = 'peer-pick'
+  pick.alt = ''
+  pick.draggable = false
+  pick.hidden = true
+  el.append(cursor, name, card, pick)
   board.appendChild(el)
   const peer = { el, x: 0, y: 0, text: '', color: '#FFE566', name: 'Guest', at: 0 }
   peers.set(id, peer)
@@ -1205,13 +1259,33 @@ function applyPeer(payload) {
   peer.name = shownName(payload.name)
   peer.el.querySelector('.peer-name').textContent = peer.name
   const card = peer.el.querySelector('.peer-card')
-  const showCard = Boolean(peer.text) && !payload.dragId
-  card.hidden = !showCard
-  if (showCard) {
-    card.textContent = peer.text
-    card.style.background = peer.color
-    card.style.color = textOn(peer.color)
+  const pickImg = peer.el.querySelector('.peer-pick')
+  const pick = String(payload.pick || '')
+  const shape = payload.shape === 'card' || SHAPE_ART[payload.shape] ? payload.shape : 'card'
+  const sticker = STICKERS[pick] ? pick : ''
+  const dragging = Boolean(payload.dragId)
+  if (sticker && !dragging) {
+    pickImg.hidden = false
+    if (pickImg.getAttribute('src') !== STICKERS[sticker]) pickImg.src = STICKERS[sticker]
+    pickImg.alt = STICKER_LABELS[sticker] || 'Sticker'
+    card.hidden = true
+  } else {
+    pickImg.hidden = true
+    const kindLabel = pick && KINDS[pick] ? KINDS[pick].label : ''
+    const shapeLabel = shape !== 'card' ? SHAPE_NAMES[shape] || '' : ''
+    const caption = peer.text || kindLabel || shapeLabel
+    const showCard = Boolean(caption) && !dragging
+    card.hidden = !showCard
+    if (showCard) {
+      card.textContent = caption
+      card.style.background = peer.color
+      card.style.color = textOn(peer.color)
+    }
   }
+  card.classList.toggle('shape-circle', !card.hidden && shape === 'circle')
+  card.classList.toggle('shape-star', !card.hidden && shape === 'star')
+  card.classList.toggle('shape-thought', !card.hidden && shape === 'thought')
+  card.classList.toggle('shape-talk', !card.hidden && shape === 'talk')
   if (payload.dragId) {
     remoteDrags.set(payload.dragId, {
       x: Number(payload.dragX),
@@ -1252,6 +1326,8 @@ function sendCursor() {
       text: input.value.slice(0, MAX_LENGTH),
       color,
       name: myName(),
+      pick: placeSticker || (placeKind !== 'text' ? placeKind : ''),
+      shape: placeKind === 'text' ? placeShape : 'card',
       dragId: movingId,
       dragX: moving ? Number(moving.x) : null,
       dragY: moving ? Number(moving.y) : null,
@@ -1433,7 +1509,10 @@ input.addEventListener('input', () => {
     renderSuggest(matches)
   } else {
     renderSuggest([])
-    if (raw) placeKind = 'text'
+    if (raw) {
+      placeKind = 'text'
+      placeSticker = ''
+    }
   }
   updateComposer()
 })
@@ -1456,7 +1535,7 @@ window.addEventListener('keydown', (event) => {
   }
   if (!typing && (key === 'i' || event.code === 'KeyI')) {
     if (hovered) {
-      if (hovered.kind === 'maxwell') return
+      if (stickerOf(hovered)) return
       event.preventDefault()
       if (editing === hovered.id) exitEdit()
       else enterEdit(hovered)
@@ -1539,7 +1618,7 @@ function syncTip(event) {
   }
   tip.hidden = false
   tip.textContent =
-    hovered.kind === 'maxwell'
+    stickerOf(hovered)
       ? 'Drag a handle to resize'
       : hovered.kind === 'draw'
       ? 'Press I to draw'
@@ -2227,7 +2306,7 @@ async function placeSpecial(event) {
   const kind = placeKind
   const spec = KINDS[kind]
   const draft = {
-    body: spec.label,
+    body: kind === 'sticker' ? placeSticker : spec.label,
     color,
     x: spot.x,
     y: spot.y,
@@ -2245,10 +2324,11 @@ async function placeSpecial(event) {
     lastSignature = ''
     markWait(ADD_WAIT)
     placeKind = 'text'
+    placeSticker = ''
     showError('')
     updateComposer()
     render()
-    if (kind !== 'maxwell') enterEdit(note)
+    if (!stickerOf(note)) enterEdit(note)
   } catch (err) {
     const message = serverMessage(err.message, 'That note did not stick. Wait 3 seconds and try again.')
     if (/wait|second|minute/i.test(message)) markWait(ADD_WAIT)
@@ -2279,7 +2359,7 @@ function stopFollowing() {
 }
 
 function enterEdit(note) {
-  if (note.kind === 'maxwell') return
+  if (stickerOf(note)) return
   if (!savedView) savedView = { x: camera.x, y: camera.y, zoom: camera.zoom }
   viewLock = false
   editing = note.id
