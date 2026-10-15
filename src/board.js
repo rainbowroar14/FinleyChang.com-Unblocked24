@@ -103,6 +103,7 @@ const seenStrokes = new Set()
 let strokeCursor = '1970-01-01T00:00:00+00:00'
 
 let rotate = null
+let resize = null
 const pointerScreen = { x: 0, y: 0 }
 
 function shownName(value) {
@@ -297,7 +298,7 @@ function paint(note) {
       event.stopPropagation()
       removeNote(el.dataset.id)
     })
-    el.append(label, trash)
+    el.append(label, trash, makeHandles())
     noteNodes.set(note.id, el)
     board.appendChild(el)
   }
@@ -308,6 +309,7 @@ function paint(note) {
   el.style.color = textOn(note.color)
   el.style.zIndex = editing === note.id ? '1000000' : String(note.z)
   el.style.setProperty('--tilt', shownTilt(note) + 'deg')
+  applyNoteBox(el, note)
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
   el.classList.toggle('writing', note.kind === 'text' && editing === note.id)
   const label = el.querySelector('.note-text')
@@ -339,7 +341,7 @@ function paint(note) {
 
 function noteSignature(list) {
   return list
-    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.kind, note.marks, note.state].join(':'))
+    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.sx, note.sy, note.kind, note.marks, note.state].join(':'))
     .join('|')
 }
 
@@ -364,7 +366,7 @@ function render() {
 
 async function loadNotes() {
   try {
-    const data = await api('?select=id,body,color,x,y,z,tilt,kind,marks,state,created_at&order=z.asc&limit=800', {
+    const data = await api('?select=id,body,color,x,y,z,tilt,sx,sy,kind,marks,state,created_at&order=z.asc&limit=800', {
       method: 'GET',
     })
     const held = drag && notes.find((note) => note.id === drag.id)
@@ -377,6 +379,14 @@ async function loadNotes() {
     } else if (turning) {
       const index = next.findIndex((note) => note.id === turning.id)
       if (index >= 0) next[index] = turning
+    }
+    if (resize) {
+      const sizing = notes.find((note) => note.id === resize.id)
+      const index = sizing && next.findIndex((note) => note.id === sizing.id)
+      if (index >= 0) {
+        next[index].sx = sizing.sx
+        next[index].sy = sizing.sy
+      }
     }
     if (open && savingPlay === open.id) {
       const index = next.findIndex((note) => note.id === open.id)
@@ -802,6 +812,121 @@ async function finishDrag(event) {
   }
 }
 
+function noteBase(note) {
+  if (note.kind === 'table') return { w: 760, h: 470 }
+  if (note.kind === 'draw' || note.kind === 'game' || note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') return { w: 256, h: 256 }
+  return { w: 230, h: 148 }
+}
+
+function noteScale(note) {
+  const sx = clamp(Number(note.sx) || 1, 0.1, 3)
+  const sy = clamp(Number(note.sy) || 1, 0.1, 3)
+  if (note.kind && note.kind !== 'text') return { sx, sy: sx }
+  return { sx, sy }
+}
+
+function applyNoteBox(el, note) {
+  const base = noteBase(note)
+  const scale = noteScale(note)
+  el.style.width = base.w * scale.sx + 'px'
+  el.style.height = base.h * scale.sy + 'px'
+  el.style.minHeight = '0'
+  if (!note.kind || note.kind === 'text') el.style.fontSize = '24px'
+}
+
+function makeHandles() {
+  const handles = document.createElement('div')
+  handles.className = 'handles'
+  for (const dir of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) {
+    const hit = document.createElement('span')
+    hit.className = 'handle ' + dir
+    hit.dataset.dir = dir
+    hit.addEventListener('pointerdown', onResizeDown)
+    handles.appendChild(hit)
+  }
+  return handles
+}
+
+function onResizeDown(event) {
+  if (event.button != null && event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  const el = event.currentTarget.closest('article.note')
+  const note = el && notes.find((item) => item.id === el.dataset.id)
+  if (!note) return
+  const scale = noteScale(note)
+  resize = {
+    id: note.id,
+    pointerId: event.pointerId,
+    dir: event.currentTarget.dataset.dir,
+    x: event.clientX,
+    y: event.clientY,
+    sx: scale.sx,
+    sy: scale.sy,
+  }
+  el.classList.add('resizing')
+  document.body.classList.add('resizing-note')
+  document.body.style.setProperty('--resize-cursor', resizeCursor(resize.dir))
+  window.addEventListener('pointermove', moveResize)
+  window.addEventListener('pointerup', finishResize)
+  window.addEventListener('pointercancel', finishResize)
+}
+
+function resizeCursor(dir) {
+  if (dir === 'n' || dir === 's') return 'ns-resize'
+  if (dir === 'e' || dir === 'w') return 'ew-resize'
+  if (dir === 'ne' || dir === 'sw') return 'nesw-resize'
+  return 'nwse-resize'
+}
+
+function moveResize(event) {
+  if (!resize || event.pointerId !== resize.pointerId) return
+  const note = notes.find((item) => item.id === resize.id)
+  const el = note && noteNodes.get(note.id)
+  if (!note || !el) return
+  const base = noteBase(note)
+  const dx = (event.clientX - resize.x) / camera.zoom
+  const dy = (event.clientY - resize.y) / camera.zoom
+  const tilt = ((Number(note.tilt) || 0) * Math.PI) / 180
+  const lx = dx * Math.cos(tilt) + dy * Math.sin(tilt)
+  const ly = -dx * Math.sin(tilt) + dy * Math.cos(tilt)
+  const dir = resize.dir
+  let sx = resize.sx
+  let sy = resize.sy
+  if (dir.includes('e')) sx = resize.sx + (2 * lx) / base.w
+  if (dir.includes('w')) sx = resize.sx - (2 * lx) / base.w
+  if (dir.includes('s')) sy = resize.sy + (2 * ly) / base.h
+  if (dir.includes('n')) sy = resize.sy - (2 * ly) / base.h
+  if (note.kind && note.kind !== 'text') {
+    const s = dir === 'n' || dir === 's' ? sy : dir === 'e' || dir === 'w' ? sx : (sx + sy) / 2
+    sx = s
+    sy = s
+  }
+  note.sx = clamp(sx, 0.1, 3)
+  note.sy = clamp(sy, 0.1, 3)
+  applyNoteBox(el, note)
+}
+
+async function finishResize(event) {
+  if (!resize || (event && event.pointerId !== resize.pointerId)) return
+  const saved = resize
+  resize = null
+  document.body.classList.remove('resizing-note')
+  window.removeEventListener('pointermove', moveResize)
+  window.removeEventListener('pointerup', finishResize)
+  window.removeEventListener('pointercancel', finishResize)
+  const el = noteNodes.get(saved.id)
+  if (el) el.classList.remove('resizing')
+  const note = notes.find((item) => item.id === saved.id)
+  if (!note) return
+  try {
+    await api('?id=eq.' + note.id, { method: 'PATCH', body: { sx: note.sx, sy: note.sy } })
+    showError('')
+  } catch (err) {
+    showError('That size did not save.')
+  }
+}
+
 function onNoteDown(event) {
   if (input.value.trim() || placeKind !== 'text') return
   const kind = notes.find((item) => item.id === event.currentTarget.dataset.id)
@@ -872,21 +997,11 @@ function applyPeer(payload) {
   const peer = ensurePeer(payload.id)
   const x = Number(payload.x) || 0
   const y = Number(payload.y) || 0
-  const now = Date.now()
-  const dist = Math.hypot(x - peer.x, y - peer.y)
-  const dt = (now - peer.at) / 1000
-  if (peer.at && dt > 0 && dt < 0.4 && dist < 800) {
-    peer.vx = (x - peer.x) / dt
-    peer.vy = (y - peer.y) / dt
-  } else {
-    peer.vx = 0
-    peer.vy = 0
-  }
   peer.x = x
   peer.y = y
   peer.text = String(payload.text || '').slice(0, MAX_LENGTH)
   peer.color = payload.color || '#FFE566'
-  peer.at = now
+  peer.at = Date.now()
   peer.name = shownName(payload.name)
   peer.el.querySelector('.peer-name').textContent = peer.name
   const card = peer.el.querySelector('.peer-card')
@@ -917,8 +1032,7 @@ function placePeers(now = Date.now()) {
       peers.delete(id)
       continue
     }
-    const ahead = Math.min(Math.max(0, now - peer.at), 50)
-    positionElement(peer.el, peer.x + (peer.vx || 0) * ahead / 1000, peer.y + (peer.vy || 0) * ahead / 1000)
+    positionElement(peer.el, peer.x, peer.y)
   }
 }
 

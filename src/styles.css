@@ -158,12 +158,66 @@ body.dragging-note * {
 
 .note-text {
   display: block;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.handles {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 1.5px solid #1c1917;
+  border-radius: 2px;
+  background: #fff;
+  opacity: 0;
+  pointer-events: auto;
+}
+
+.note:hover .handle,
+.note.resizing .handle {
+  opacity: 1;
+}
+
+.handle.n,
+.handle.s {
+  left: 50%;
+  cursor: ns-resize;
+}
+
+.handle.e,
+.handle.w {
+  top: 50%;
+  cursor: ew-resize;
+}
+
+.handle.n { top: 0; }
+.handle.s { top: 100%; }
+.handle.e { left: 100%; }
+.handle.w { left: 0; }
+.handle.nw { top: 0; left: 0; cursor: nwse-resize; }
+.handle.ne { top: 0; left: 100%; cursor: nesw-resize; }
+.handle.se { top: 100%; left: 100%; cursor: nwse-resize; }
+.handle.sw { top: 100%; left: 0; cursor: nesw-resize; }
+
+body.resizing-note,
+body.resizing-note * {
+  cursor: var(--resize-cursor, nwse-resize) !important;
+  user-select: none;
 }
 
 .note .editbox {
   display: block;
   width: 100%;
-  min-height: 108px;
+  height: 100%;
+  min-height: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -268,7 +322,7 @@ body.dragging-note * {
   height: 256px;
   min-height: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .note.table,
@@ -277,7 +331,7 @@ body.dragging-note * {
   height: 470px;
   min-height: 0;
   padding: 12px 12px 22px;
-  overflow: hidden;
+  overflow: visible;
   font-family: Figtree, "Segoe UI", sans-serif;
 }
 
@@ -287,8 +341,10 @@ body.dragging-note * {
 
 .note.table .ptable {
   display: grid;
+  width: 100%;
+  height: calc(100% - 26px);
   grid-template-columns: repeat(18, 1fr);
-  grid-template-rows: repeat(10, 28px);
+  grid-template-rows: repeat(10, minmax(0, 1fr));
   gap: 3px;
 }
 
@@ -332,8 +388,8 @@ body.dragging-note * {
 
 .note.draw canvas {
   display: block;
-  width: 256px;
-  height: 256px;
+  width: 100%;
+  height: 100%;
   touch-action: none;
   cursor: inherit;
 }
@@ -369,8 +425,8 @@ body.dragging-note * {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
-  width: 256px;
-  height: 256px;
+  width: 100%;
+  height: 100%;
 }
 
 .note.game .cell {
@@ -534,8 +590,8 @@ body.dragging-note * {
 .note.lights .grid,
 .note.memo .grid {
   display: grid;
-  width: 256px;
-  height: 256px;
+  width: 100%;
+  height: 100%;
   gap: 4px;
   padding: 28px 8px 22px;
   box-sizing: border-box;
