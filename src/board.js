@@ -26,9 +26,9 @@ const statusEl = document.getElementById('status')
 const statusText = document.getElementById('status-text')
 const colorsEl = document.getElementById('colors')
 
-const ADD_WAIT = 'sticky-add-10'
-const DELETE_WAIT = 'sticky-del-10'
-const COOLDOWN = 10000
+const ADD_WAIT = 'sticky-add-3'
+const DELETE_WAIT = 'sticky-del-3'
+const COOLDOWN = 3000
 const WORLD = 100000
 
 const noteNodes = new Map()
@@ -243,6 +243,7 @@ function paint(note) {
   el.style.zIndex = editing === note.id ? '1000000' : String(note.z)
   el.style.setProperty('--tilt', (isBoardNote(note) ? 0 : note.tilt || 0) + 'deg')
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
+  el.classList.toggle('writing', note.kind === 'text' && editing === note.id)
   const label = el.querySelector('.note-text')
   if (note.kind === 'draw') {
     label.hidden = true
@@ -547,7 +548,7 @@ async function place(event) {
   const body = input.value.trim().slice(0, MAX_LENGTH)
   if (!body) return
   if (waitLeft(ADD_WAIT) > 0) {
-    showError('Wait 10 seconds before another note.')
+    showError('Wait 3 seconds before another note.')
     updateComposer()
     return
   }
@@ -579,7 +580,7 @@ async function place(event) {
     showError('')
     render()
   } catch (err) {
-    const message = serverMessage(err.message, 'That note did not stick. Wait 10 seconds and try again.')
+    const message = serverMessage(err.message, 'That note did not stick. Wait 3 seconds and try again.')
     if (/wait|second|minute/i.test(message)) markWait(ADD_WAIT)
     showError(message)
     updateComposer()
@@ -589,7 +590,7 @@ async function place(event) {
 async function removeNote(id) {
   if (!id) return
   if (waitLeft(DELETE_WAIT) > 0) {
-    showError('Wait 10 seconds before another delete.')
+    showError('Wait 3 seconds before another delete.')
     updateComposer()
     return
   }
@@ -1695,7 +1696,7 @@ async function finishStroke() {
 
 async function placeSpecial(event) {
   if (waitLeft(ADD_WAIT) > 0) {
-    showError('Wait 10 seconds before another note.')
+    showError('Wait 3 seconds before another note.')
     updateComposer()
     return
   }
@@ -1729,7 +1730,7 @@ async function placeSpecial(event) {
     render()
     enterEdit(note)
   } catch (err) {
-    const message = serverMessage(err.message, 'That note did not stick. Wait 10 seconds and try again.')
+    const message = serverMessage(err.message, 'That note did not stick. Wait 3 seconds and try again.')
     if (/wait|second|minute/i.test(message)) markWait(ADD_WAIT)
     showError(message)
     updateComposer()
@@ -1748,6 +1749,8 @@ function stopFollowing() {
     if (!el) continue
     const box = el.querySelector('.editbox')
     if (box) box.hidden = true
+    const mark = el.querySelector('.editmark')
+    if (mark) mark.hidden = true
     const label = el.querySelector('.note-text')
     if (label && note.kind === 'text') label.hidden = false
     if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') ensurePlay(el, note)
@@ -1760,11 +1763,7 @@ function enterEdit(note) {
   board.classList.add('editing')
   paintbar.hidden = note.kind !== 'draw'
   tip.hidden = true
-  const el = noteNodes.get(note.id)
-  if (el && note.kind === 'game') ensureGame(el, note)
-  if (el && (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo')) ensurePlay(el, note)
-  if (el && note.kind === 'table') ensureTable(el, note)
-  if (el && note.kind === 'text') openTextEdit(el, note)
+  paint(note)
 }
 
 function openTextEdit(el, note) {
@@ -1778,10 +1777,20 @@ function openTextEdit(el, note) {
     box.addEventListener('input', () => queueTextSave(el.dataset.id))
     el.appendChild(box)
   }
+  let mark = el.querySelector('.editmark')
+  if (!mark) {
+    mark = document.createElement('span')
+    mark.className = 'editmark'
+    mark.textContent = 'Esc'
+    el.appendChild(mark)
+  }
+  mark.hidden = false
   box.hidden = false
   if (document.activeElement !== box) {
     box.value = note.body
     box.focus()
+    const end = box.value.length
+    box.setSelectionRange(end, end)
   }
 }
 
@@ -1836,6 +1845,8 @@ function exitEdit() {
   if (currentEl) {
     const box = currentEl.querySelector('.editbox')
     if (box) box.hidden = true
+    const mark = currentEl.querySelector('.editmark')
+    if (mark) mark.hidden = true
     const label = currentEl.querySelector('.note-text')
     if (label && !currentEl.classList.contains('draw') && !currentEl.classList.contains('game') && !currentEl.classList.contains('mine') && !currentEl.classList.contains('lights') && !currentEl.classList.contains('memo') && !currentEl.classList.contains('table')) label.hidden = false
   }
@@ -1858,7 +1869,9 @@ function glideCamera(dt) {
     const rect = board.getBoundingClientRect()
     const zoom = note.kind === 'table'
       ? clamp(Math.min((rect.width * 0.92) / 780, (rect.height * 0.86) / 500), 0.35, MAX_ZOOM)
-      : clamp((Math.min(rect.width, rect.height) * 0.82) / 256, 1.15, MAX_ZOOM)
+      : note.kind === 'text'
+        ? clamp(Math.min((rect.width * 0.42) / 230, (rect.height * 0.42) / 170), 1.4, 2.15)
+        : clamp((Math.min(rect.width, rect.height) * 0.82) / 256, 1.15, MAX_ZOOM)
     target = {
       x: note.x - rect.width / (2 * zoom),
       y: note.y - rect.height / (2 * zoom),

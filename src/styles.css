@@ -92,6 +92,7 @@ input {
 
 .board {
   position: relative;
+  z-index: 1;
   margin: 0 12px;
   overflow: hidden;
   border-radius: 18px;
@@ -166,13 +167,36 @@ body.dragging-note * {
   margin: 0;
   padding: 0;
   border: 0;
+  border-radius: 2px;
   resize: none;
   background: transparent;
   color: inherit;
   font: inherit;
   line-height: 1.2;
+  caret-color: #1c1917;
   user-select: text;
   cursor: text;
+}
+
+.note.writing {
+  outline: 3px solid #1c1917;
+  outline-offset: 5px;
+  cursor: text;
+}
+
+.note .editmark {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #1c1917;
+  color: #fffef8;
+  font-family: Figtree, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
 }
 
 .trash {
@@ -396,7 +420,7 @@ body.dragging-note * {
 
 .tip {
   position: fixed;
-  z-index: 30;
+  z-index: 2000000;
   margin: 0;
   padding: 6px 10px;
   border-radius: 8px;
@@ -604,7 +628,7 @@ body.dragging-note * {
   left: 12px;
   right: 12px;
   bottom: calc(100% + 8px);
-  z-index: 6;
+  z-index: 2;
   margin: 0;
   padding: 6px;
   list-style: none;
@@ -629,6 +653,7 @@ body.dragging-note * {
 
 .composer {
   position: relative;
+  z-index: 5;
   width: min(720px, calc(100% - 24px));
   margin: 12px auto 16px;
   padding: 12px;
