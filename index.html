@@ -8,14 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600;700&family=Patrick+Hand&family=Syne:wght@700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="src/styles.css?v=4" />
+    <link rel="stylesheet" href="src/styles.css?v=5" />
   </head>
   <body>
     <div class="app">
       <header class="topbar">
         <div>
           <p class="mark">Sticky Board</p>
-          <p class="tag">Scroll to zoom in and out. Drag a note and hold R to turn it.</p>
+          <p class="tag">Scroll to zoom. Press I on a drawing or tic-tac-toe note. Coordinates follow your cursor.</p>
         </div>
         <p class="status status-loading" id="status"><span class="dot"></span><span id="status-text">Connecting</span></p>
       </header>
@@ -24,6 +24,21 @@
         <p class="hint" id="hint" hidden>The wall is empty. Stick the first note.</p>
         <div class="note ghost" id="ghost" hidden></div>
         <div id="peers"></div>
+        <p class="coords" id="coords">x 0 · y 0</p>
+        <div class="paintbar" id="paintbar" hidden>
+          <button type="button" class="ink on" data-ink="#1C1917" style="background:#1C1917" aria-label="Black"></button>
+          <button type="button" class="ink" data-ink="#E11D48" style="background:#E11D48" aria-label="Red"></button>
+          <button type="button" class="ink" data-ink="#2563EB" style="background:#2563EB" aria-label="Blue"></button>
+          <button type="button" class="ink" data-ink="#16A34A" style="background:#16A34A" aria-label="Green"></button>
+          <button type="button" class="ink" data-ink="#F8F7F4" style="background:#F8F7F4" aria-label="White"></button>
+          <button type="button" class="size on" data-size="4">S</button>
+          <button type="button" class="size" data-size="10">M</button>
+          <button type="button" class="size" data-size="22">L</button>
+          <button type="button" id="eraser">Eraser</button>
+          <span id="paint-coords">0, 0</span>
+          <button type="button" id="paint-done">Done</button>
+        </div>
+        <p class="tip" id="tip" hidden>Press I to draw</p>
       </div>
 
       <form class="composer" id="composer">
@@ -34,10 +49,14 @@
           <span class="count" id="count">0/100</span>
         </label>
         <div class="colors" id="colors" role="listbox" aria-label="Note color"></div>
+        <div class="specials">
+          <button type="button" id="add-draw">Drawing</button>
+          <button type="button" id="add-game">Tic-tac-toe</button>
+        </div>
         <p class="place-hint" id="place-hint">Write something, then click the wall. Drag a note to cover another one.</p>
       </form>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-    <script src="src/board.js?v=4"></script>
+    <script src="src/board.js?v=5"></script>
   </body>
 </html>

@@ -37,7 +37,13 @@ const remoteDrags = new Map()
 const keys = new Set()
 const camera = { x: 0, y: 0, zoom: 1 }
 const MIN_ZOOM = 0.2
-const MAX_ZOOM = 4
+const MAX_ZOOM = 6
+const coordsEl = document.getElementById('coords')
+const tip = document.getElementById('tip')
+const paintbar = document.getElementById('paintbar')
+const paintCoords = document.getElementById('paint-coords')
+const drawBtn = document.getElementById('add-draw')
+const gameBtn = document.getElementById('add-game')
 let notes = []
 let color = COLORS[0]
 let drag = null
@@ -49,6 +55,17 @@ let pan = null
 let blockPlace = false
 let room = null
 let publishTimer = 0
+let placeKind = 'text'
+let editing = null
+let savedView = null
+let hovered = null
+let ink = '#1C1917'
+let brush = 4
+let eraserOn = false
+let drawingStroke = null
+const strokes = new Map()
+const seenStrokes = new Set()
+let strokeCursor = '1970-01-01T00:00:00+00:00'
 
 function clientId() {
   let id = localStorage.getItem('sticky-client')
@@ -135,7 +152,8 @@ function showError(message) {
 }
 
 async function api(path, options) {
-  const response = await fetch(API + path, {
+  const table = (options && options.table) || 'notes'
+  const response = await fetch(API.replace('/notes', '/' + table) + path, {
     method: options.method,
     headers: {
       apikey: KEY,
@@ -180,19 +198,32 @@ function paint(note) {
     board.appendChild(el)
   }
   el.dataset.id = note.id
+  el.classList.toggle('draw', note.kind === 'draw')
+  el.classList.toggle('game', note.kind === 'game')
   el.setAttribute('aria-label', note.body)
   el.style.background = note.color
   el.style.color = textOn(note.color)
   el.style.zIndex = String(note.z)
-  el.style.setProperty('--tilt', (note.tilt || 0) + 'deg')
+  el.style.setProperty('--tilt', (note.kind === 'draw' || note.kind === 'game' ? 0 : note.tilt || 0) + 'deg')
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
   const label = el.querySelector('.note-text')
-  if (label.textContent !== note.body) label.textContent = note.body
+  if (note.kind === 'draw') {
+    label.hidden = true
+    ensureCanvas(el)
+    ensureWhere(el)
+    redrawNote(note.id)
+  } else if (note.kind === 'game') {
+    label.hidden = true
+    ensureGame(el, note)
+  } else if (label.textContent !== note.body) {
+    label.hidden = false
+    label.textContent = note.body
+  }
 }
 
 function noteSignature(list) {
   return list
-    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt].join(':'))
+    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.kind, note.marks].join(':'))
     .join('|')
 }
 
@@ -217,14 +248,23 @@ function render() {
 
 async function loadNotes() {
   try {
-    const data = await api('?select=id,body,color,x,y,z,tilt,created_at&order=z.asc&limit=800', {
+    const data = await api('?select=id,body,color,x,y,z,tilt,kind,marks,created_at&order=z.asc&limit=800', {
       method: 'GET',
     })
     const held = drag && notes.find((note) => note.id === drag.id)
+    const open = editing && notes.find((note) => note.id === editing)
     const next = data || []
     if (held) {
       const index = next.findIndex((note) => note.id === held.id)
       if (index >= 0) next[index] = held
+    }
+    if (open && open.kind === 'game') {
+      const index = next.findIndex((note) => note.id === open.id)
+      if (index >= 0) {
+        const localCount = [...(open.marks || '')].filter((mark) => mark !== ' ').length
+        const remoteCount = [...(next[index].marks || '')].filter((mark) => mark !== ' ').length
+        if (localCount > remoteCount) next[index].marks = open.marks
+      }
     }
     const signature = noteSignature(next)
     notes = next
@@ -248,6 +288,7 @@ async function loadNotes() {
     setStatus('error', 'Reconnecting')
     showError('The board could not load. Check your connection and refresh.')
   }
+  loadNewStrokes()
 }
 
 function worldFromEvent(event) {
@@ -295,8 +336,13 @@ function layout() {
     const spot = noteWorld(note)
     positionElement(el, spot.x, spot.y)
     el.style.setProperty('--tilt', shownTilt(note) + 'deg')
+    const where = el.querySelector('.where')
+    if (where) where.textContent = Math.round(spot.x) + ', ' + Math.round(spot.y)
   }
-  if (pointer && input.value.trim()) positionElement(ghost, pointer.x, pointer.y)
+  const here = pointer || { x: camera.x + board.clientWidth / 2 / camera.zoom, y: camera.y + board.clientHeight / 2 / camera.zoom }
+  const coordText = 'x ' + Math.round(here.x) + ' · y ' + Math.round(here.y)
+  if (coordsEl.textContent !== coordText) coordsEl.textContent = coordText
+  if (pointer && (input.value.trim() || placeKind !== 'text')) positionElement(ghost, pointer.x, pointer.y)
   const now = Date.now()
   for (const [id, peer] of peers) {
     if (now - peer.at > 2500) {
@@ -323,17 +369,25 @@ function updateComposer() {
   if (count.textContent !== countText) count.textContent = countText
   count.classList.toggle('full', length === MAX_LENGTH)
   const draft = input.value.trim()
-  board.classList.toggle('armed', Boolean(draft))
+  drawBtn.classList.toggle('on', placeKind === 'draw')
+  gameBtn.classList.toggle('on', placeKind === 'game')
+  board.classList.toggle('armed', Boolean(draft) || placeKind !== 'text')
   const waiting = cooldownText()
+  const ghostLabel = placeKind === 'draw' ? 'Drawing' : placeKind === 'game' ? 'Tic-tac-toe' : draft
   const nextHint = waiting
     ? waiting
-    : draft
-      ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-      : 'Scroll to zoom in and out. Drag a note and hold R to turn it.'
+    : placeKind === 'draw'
+      ? 'Click the wall to place a 256×256 drawing. It zooms in so you can paint.'
+      : placeKind === 'game'
+        ? 'Click the wall to place tic-tac-toe. Press I on it to take the next move.'
+        : draft
+          ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
+          : 'Scroll to zoom. Coordinates follow your cursor. Press I on a drawing or game.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
-  const showGhost = Boolean(draft)
+  const showGhost = Boolean(ghostLabel)
+  ghost.classList.toggle('special', placeKind !== 'text')
   if (ghost.hidden === showGhost) ghost.hidden = !showGhost
-  if (showGhost && ghost.textContent !== draft) ghost.textContent = draft
+  if (showGhost && ghost.textContent !== ghostLabel) ghost.textContent = ghostLabel
   if (showGhost) {
     ghost.style.background = color
     ghost.style.color = textOn(color)
@@ -395,7 +449,11 @@ async function place(event) {
     return
   }
   if (drag || pan) return
-  if (event.target.closest('article.note')) return
+  if (event.target.closest('article.note') || event.target.closest('.paintbar')) return
+  if (placeKind === 'draw' || placeKind === 'game') {
+    placeSpecial(event)
+    return
+  }
   const body = input.value.trim().slice(0, MAX_LENGTH)
   if (!body) return
   if (waitLeft(ADD_WAIT) > 0) {
@@ -534,7 +592,9 @@ async function finishDrag(event) {
 }
 
 function onNoteDown(event) {
-  if (input.value.trim()) return
+  if (input.value.trim() || placeKind !== 'text') return
+  const kind = notes.find((item) => item.id === event.currentTarget.dataset.id)
+  if (kind && editing === kind.id && (kind.kind === 'draw' || kind.kind === 'game')) return
   if (event.button != null && event.button !== 0) return
   const note = notes.find((item) => item.id === event.currentTarget.dataset.id)
   if (!note) return
@@ -653,6 +713,10 @@ function connectLive() {
     const payload = message && message.payload && message.payload.id ? message.payload : message
     applyPeer(payload)
   })
+  room.on('broadcast', { event: 'stroke' }, (message) => {
+    const payload = message && message.payload && message.payload.id ? message.payload : message
+    addStroke(payload)
+  })
   room.subscribe()
 }
 
@@ -674,9 +738,10 @@ function onBoardPointerDown(event) {
 
 function onBoardPointerMove(event) {
   pointer = worldFromEvent(event)
-  if (input.value.trim()) {
+  syncTip(event)
+  if (input.value.trim() || placeKind !== 'text') {
     ghost.hidden = false
-    ghost.textContent = input.value.trim()
+    ghost.textContent = placeKind === 'draw' ? 'Drawing' : placeKind === 'game' ? 'Tic-tac-toe' : input.value.trim()
     ghost.style.background = color
     ghost.style.color = textOn(color)
   }
@@ -709,7 +774,9 @@ board.addEventListener('pointermove', onBoardPointerMove)
 board.addEventListener('pointerup', onBoardPointerUp)
 board.addEventListener('pointercancel', onBoardPointerUp)
 board.addEventListener('pointerleave', () => {
-  if (!drag && !input.value.trim()) ghost.hidden = true
+  hovered = null
+  tip.hidden = true
+  if (!drag && !input.value.trim() && placeKind === 'text') ghost.hidden = true
 })
 board.addEventListener('click', place)
 window.addEventListener(
@@ -737,11 +804,30 @@ window.addEventListener(
 document.getElementById('composer').addEventListener('submit', (event) => event.preventDefault())
 input.addEventListener('input', () => {
   if (input.value.length > MAX_LENGTH) input.value = input.value.slice(0, MAX_LENGTH)
+  if (input.value.trim()) placeKind = 'text'
   updateComposer()
 })
 
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase()
+  if (event.key === 'Escape' && editing) {
+    event.preventDefault()
+    exitEdit()
+    return
+  }
+  if (key === 'i' || event.code === 'KeyI') {
+    if (hovered && (hovered.kind === 'draw' || hovered.kind === 'game')) {
+      event.preventDefault()
+      if (editing === hovered.id) exitEdit()
+      else enterEdit(hovered)
+      return
+    }
+    if (editing) {
+      event.preventDefault()
+      exitEdit()
+      return
+    }
+  }
   if (key === 'r' || event.code === 'KeyR') {
     keys.add('r')
     if (drag) {
@@ -779,15 +865,16 @@ function tick(now) {
   if (keys.has('s') || keys.has('arrowdown')) my += 1
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1
   if (keys.has('d') || keys.has('arrowright')) mx += 1
-  if (mx || my) {
+  if (!editing && (mx || my)) {
     camera.x += (mx * 760 * dt) / camera.zoom
     camera.y += (my * 760 * dt) / camera.zoom
     layout()
     publishSoon()
   }
+  glideCamera(dt)
   if (drag && keys.has('r')) {
     const note = notes.find((item) => item.id === drag.id)
-    if (note) {
+    if (note && note.kind !== 'draw' && note.kind !== 'game') {
       armRotate()
       note.tilt = wrapTilt((Number(note.tilt) || 0) + 140 * dt)
       drag.tilt = note.tilt
