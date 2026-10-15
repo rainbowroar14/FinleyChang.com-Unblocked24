@@ -36,8 +36,8 @@ const peers = new Map()
 const remoteDrags = new Map()
 const keys = new Set()
 const camera = { x: 0, y: 0, zoom: 1 }
-const MIN_ZOOM = 0.35
-const MAX_ZOOM = 3
+const MIN_ZOOM = 0.2
+const MAX_ZOOM = 4
 let notes = []
 let color = COLORS[0]
 let drag = null
@@ -270,13 +270,6 @@ function wrapTilt(value) {
   return angle
 }
 
-function shortestDegrees(from, to) {
-  let delta = to - from
-  while (delta > 180) delta -= 360
-  while (delta < -180) delta += 360
-  return delta
-}
-
 function shownTilt(note) {
   if (drag && drag.id === note.id) return drag.tilt
   const remote = remoteDrags.get(note.id)
@@ -336,7 +329,7 @@ function updateComposer() {
     ? waiting
     : draft
       ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-      : 'WASD, drag, or scroll to zoom. Hold R while dragging a note to turn it.'
+      : 'Scroll to zoom in and out. Drag a note and hold R to turn it.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   const showGhost = Boolean(draft)
   if (ghost.hidden === showGhost) ghost.hidden = !showGhost
@@ -495,26 +488,6 @@ function disarmRotate() {
   document.body.classList.remove('rotating-note')
 }
 
-function turnNote(event, note) {
-  const rect = board.getBoundingClientRect()
-  const centerX = rect.left + (note.x - camera.x) * camera.zoom
-  const centerY = rect.top + (note.y - camera.y) * camera.zoom
-  const dx = event.clientX - centerX
-  const dy = event.clientY - centerY
-  if (Math.hypot(dx, dy) < 36) {
-    const spin = (event.clientX - drag.spinX) * 0.55
-    note.tilt = wrapTilt((Number(note.tilt) || 0) + spin)
-    drag.lastAngle = null
-  } else {
-    const angle = (Math.atan2(dy, dx) * 180) / Math.PI
-    if (drag.lastAngle == null) drag.lastAngle = angle
-    note.tilt = wrapTilt((Number(note.tilt) || 0) + shortestDegrees(drag.lastAngle, angle))
-    drag.lastAngle = angle
-  }
-  drag.spinX = event.clientX
-  drag.tilt = note.tilt
-}
-
 function moveDrag(event) {
   if (!drag || event.pointerId !== drag.pointerId) return
   const note = notes.find((item) => item.id === drag.id)
@@ -523,7 +496,7 @@ function moveDrag(event) {
   drag.lastClientY = event.clientY
   if (keys.has('r')) armRotate()
   if (drag.rotating) {
-    turnNote(event, note)
+    drag.tilt = note.tilt
   } else {
     note.x = clamp(drag.startX + (event.clientX - drag.originX) / camera.zoom, -WORLD, WORLD)
     note.y = clamp(drag.startY + (event.clientY - drag.originY) / camera.zoom, -WORLD, WORLD)
@@ -739,15 +712,19 @@ board.addEventListener('pointerleave', () => {
   if (!drag && !input.value.trim()) ghost.hidden = true
 })
 board.addEventListener('click', place)
-board.addEventListener(
+window.addEventListener(
   'wheel',
   (event) => {
+    if (event.target.closest && event.target.closest('input, label.custom')) return
     event.preventDefault()
     const rect = board.getBoundingClientRect()
     const sx = event.clientX - rect.left
     const sy = event.clientY - rect.top
+    let delta = event.deltaY
+    if (event.deltaMode === 1) delta *= 40
+    else if (event.deltaMode === 2) delta *= 800
     const oldZoom = camera.zoom
-    const next = clamp(oldZoom * Math.exp(-event.deltaY * 0.0012), MIN_ZOOM, MAX_ZOOM)
+    const next = clamp(oldZoom * Math.exp(-delta * 0.0035), MIN_ZOOM, MAX_ZOOM)
     if (next === oldZoom) return
     camera.x = sx / oldZoom + camera.x - sx / next
     camera.y = sy / oldZoom + camera.y - sy / next
@@ -765,15 +742,13 @@ input.addEventListener('input', () => {
 
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase()
-  if (key === 'r') {
+  if (key === 'r' || event.code === 'KeyR') {
+    keys.add('r')
     if (drag) {
       event.preventDefault()
-      keys.add('r')
       armRotate()
-      return
     }
-    if (document.activeElement !== input) keys.add('r')
-    return
+    if (drag || document.activeElement === input) return
   }
   if (document.activeElement === input) return
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
@@ -784,7 +759,10 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => {
   const key = event.key.toLowerCase()
   keys.delete(key)
-  if (key === 'r') disarmRotate()
+  if (key === 'r' || event.code === 'KeyR') {
+    keys.delete('r')
+    disarmRotate()
+  }
 })
 window.addEventListener('blur', () => {
   keys.clear()
@@ -806,6 +784,16 @@ function tick(now) {
     camera.y += (my * 760 * dt) / camera.zoom
     layout()
     publishSoon()
+  }
+  if (drag && keys.has('r')) {
+    const note = notes.find((item) => item.id === drag.id)
+    if (note) {
+      armRotate()
+      note.tilt = wrapTilt((Number(note.tilt) || 0) + 140 * dt)
+      drag.tilt = note.tilt
+      layout()
+      publishSoon()
+    }
   }
   requestAnimationFrame(tick)
 }
