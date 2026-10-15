@@ -220,6 +220,9 @@ body.dragging-note * {
 
 .note.draw,
 .note.game,
+.note.mine,
+.note.lights,
+.note.memo,
 .ghost.special {
   width: 256px;
   height: 256px;
@@ -237,7 +240,10 @@ body.dragging-note * {
 }
 
 .board.editing .note.draw,
-.board.editing .note.game {
+.board.editing .note.game,
+.board.editing .note.mine,
+.board.editing .note.lights,
+.board.editing .note.memo {
   pointer-events: auto;
 }
 
@@ -279,7 +285,10 @@ body.dragging-note * {
   cursor: pointer;
 }
 
-.note.game .turn {
+.note.game .turn,
+.note.mine .turn,
+.note.lights .turn,
+.note.memo .turn {
   position: absolute;
   top: 8px;
   left: 8px;
@@ -381,8 +390,121 @@ body.dragging-note * {
   font-variant-numeric: tabular-nums;
 }
 
+.note.mine .grid,
+.note.lights .grid,
+.note.memo .grid {
+  display: grid;
+  width: 256px;
+  height: 256px;
+  gap: 4px;
+  padding: 28px 8px 22px;
+  box-sizing: border-box;
+}
+
+.note.mine .grid {
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+}
+
+.note.lights .grid {
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  align-items: center;
+  justify-items: center;
+}
+
+.note.memo .grid {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+
+.note.mine .cell,
+.note.lights .cell,
+.note.memo .cell {
+  border: 0;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  color: inherit;
+  font-family: Figtree, "Segoe UI", sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.note.mine .cell {
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.note.mine .cell.hidden,
+.note.memo .cell.down {
+  background: rgba(28, 25, 23, 0.16);
+}
+
+.note.mine .cell.open,
+.note.memo .cell.up {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.note.mine .cell.flag {
+  background: rgba(28, 25, 23, 0.16);
+  color: #e11d48;
+}
+
+.note.mine .cell.boom {
+  background: #e11d48;
+  color: #fff;
+}
+
+.note.lights .cell {
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+}
+
+.note.lights .cell.on {
+  background: #fffef8;
+  box-shadow: 0 0 0 3px rgba(28, 25, 23, 0.18);
+}
+
+.note.lights .cell.off {
+  background: rgba(28, 25, 23, 0.55);
+}
+
+.note.memo .cell {
+  border-radius: 8px;
+  font-family: Syne, sans-serif;
+  font-size: 22px;
+}
+
+.note.memo .cell.matched {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.note .flagmode {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: #fff;
+  color: #1c1917;
+  font-family: Figtree, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.note .flagmode.on {
+  background: #e11d48;
+  color: #fff;
+}
+
 .specials {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }

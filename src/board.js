@@ -42,8 +42,28 @@ const coordsEl = document.getElementById('coords')
 const tip = document.getElementById('tip')
 const paintbar = document.getElementById('paintbar')
 const paintCoords = document.getElementById('paint-coords')
-const drawBtn = document.getElementById('add-draw')
-const gameBtn = document.getElementById('add-game')
+const KINDS = {
+  draw: {
+    label: 'Drawing',
+    hint: 'Click the wall to place a 256\u00d7256 drawing. It zooms in so you can paint.',
+  },
+  game: {
+    label: 'Tic-tac-toe',
+    hint: 'Click the wall to place tic-tac-toe. Press I on it to take the next move.',
+  },
+  mine: {
+    label: 'Mines',
+    hint: 'Click the wall to place mines. Press I, open a square, or right-click to flag.',
+  },
+  lights: {
+    label: 'Lights',
+    hint: 'Click the wall to place lights. Press I and turn every light off.',
+  },
+  memo: {
+    label: 'Memory',
+    hint: 'Click the wall to place memory. Press I and match the pairs.',
+  },
+}
 let notes = []
 let color = COLORS[0]
 let drag = null
@@ -57,6 +77,8 @@ let room = null
 let publishTimer = 0
 let placeKind = 'text'
 let editing = null
+let savingPlay = null
+let flagMode = false
 let savedView = null
 let hovered = null
 let ink = '#1C1917'
@@ -66,6 +88,10 @@ let drawingStroke = null
 const strokes = new Map()
 const seenStrokes = new Set()
 let strokeCursor = '1970-01-01T00:00:00+00:00'
+
+function isBoardNote(note) {
+  return Boolean(note && KINDS[note.kind])
+}
 
 function clientId() {
   let id = localStorage.getItem('sticky-client')
@@ -198,13 +224,12 @@ function paint(note) {
     board.appendChild(el)
   }
   el.dataset.id = note.id
-  el.classList.toggle('draw', note.kind === 'draw')
-  el.classList.toggle('game', note.kind === 'game')
+  for (const name of Object.keys(KINDS)) el.classList.toggle(name, note.kind === name)
   el.setAttribute('aria-label', note.body)
   el.style.background = note.color
   el.style.color = textOn(note.color)
   el.style.zIndex = String(note.z)
-  el.style.setProperty('--tilt', (note.kind === 'draw' || note.kind === 'game' ? 0 : note.tilt || 0) + 'deg')
+  el.style.setProperty('--tilt', (isBoardNote(note) ? 0 : note.tilt || 0) + 'deg')
   el.classList.toggle('dragging', Boolean(drag && drag.id === note.id))
   const label = el.querySelector('.note-text')
   if (note.kind === 'draw') {
@@ -215,6 +240,9 @@ function paint(note) {
   } else if (note.kind === 'game') {
     label.hidden = true
     ensureGame(el, note)
+  } else if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') {
+    label.hidden = true
+    ensurePlay(el, note)
   } else if (label.textContent !== note.body) {
     label.hidden = false
     label.textContent = note.body
@@ -223,7 +251,7 @@ function paint(note) {
 
 function noteSignature(list) {
   return list
-    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.kind, note.marks].join(':'))
+    .map((note) => [note.id, note.body, note.color, note.x, note.y, note.z, note.tilt, note.kind, note.marks, note.state].join(':'))
     .join('|')
 }
 
@@ -248,7 +276,7 @@ function render() {
 
 async function loadNotes() {
   try {
-    const data = await api('?select=id,body,color,x,y,z,tilt,kind,marks,created_at&order=z.asc&limit=800', {
+    const data = await api('?select=id,body,color,x,y,z,tilt,kind,marks,state,created_at&order=z.asc&limit=800', {
       method: 'GET',
     })
     const held = drag && notes.find((note) => note.id === drag.id)
@@ -258,7 +286,13 @@ async function loadNotes() {
       const index = next.findIndex((note) => note.id === held.id)
       if (index >= 0) next[index] = held
     }
-    if (open && open.kind === 'game') {
+    if (open && savingPlay === open.id) {
+      const index = next.findIndex((note) => note.id === open.id)
+      if (index >= 0) {
+        next[index].state = open.state
+        next[index].marks = open.marks
+      }
+    } else if (open && open.kind === 'game') {
       const index = next.findIndex((note) => note.id === open.id)
       if (index >= 0) {
         const localCount = [...(open.marks || '')].filter((mark) => mark !== ' ').length
@@ -335,7 +369,7 @@ function layout() {
     if (!el) continue
     const spot = noteWorld(note)
     positionElement(el, spot.x, spot.y)
-    el.style.setProperty('--tilt', shownTilt(note) + 'deg')
+    el.style.setProperty('--tilt', (isBoardNote(note) ? 0 : shownTilt(note)) + 'deg')
     const where = el.querySelector('.where')
     if (where) where.textContent = Math.round(spot.x) + ', ' + Math.round(spot.y)
   }
@@ -369,20 +403,20 @@ function updateComposer() {
   if (count.textContent !== countText) count.textContent = countText
   count.classList.toggle('full', length === MAX_LENGTH)
   const draft = input.value.trim()
-  drawBtn.classList.toggle('on', placeKind === 'draw')
-  gameBtn.classList.toggle('on', placeKind === 'game')
+  for (const button of document.querySelectorAll('.specials button')) {
+    button.classList.toggle('on', button.dataset.kind === placeKind)
+  }
   board.classList.toggle('armed', Boolean(draft) || placeKind !== 'text')
   const waiting = cooldownText()
-  const ghostLabel = placeKind === 'draw' ? 'Drawing' : placeKind === 'game' ? 'Tic-tac-toe' : draft
+  const spec = KINDS[placeKind]
+  const ghostLabel = spec ? spec.label : draft
   const nextHint = waiting
     ? waiting
-    : placeKind === 'draw'
-      ? 'Click the wall to place a 256×256 drawing. It zooms in so you can paint.'
-      : placeKind === 'game'
-        ? 'Click the wall to place tic-tac-toe. Press I on it to take the next move.'
-        : draft
-          ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
-          : 'Scroll to zoom. Coordinates follow your cursor. Press I on a drawing or game.'
+    : spec
+      ? spec.hint
+      : draft
+        ? 'Click the wall to stick it. WASD or drag empty space to move. Scroll to zoom.'
+        : 'Scroll to zoom. Coordinates follow your cursor. Press I on a drawing or a game.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   const showGhost = Boolean(ghostLabel)
   ghost.classList.toggle('special', placeKind !== 'text')
@@ -450,7 +484,7 @@ async function place(event) {
   }
   if (drag || pan || editing) return
   if (event.target.closest('article.note') || event.target.closest('.paintbar')) return
-  if (placeKind === 'draw' || placeKind === 'game') {
+  if (KINDS[placeKind]) {
     placeSpecial(event)
     return
   }
@@ -594,7 +628,7 @@ async function finishDrag(event) {
 function onNoteDown(event) {
   if (input.value.trim() || placeKind !== 'text') return
   const kind = notes.find((item) => item.id === event.currentTarget.dataset.id)
-  if (kind && editing === kind.id && (kind.kind === 'draw' || kind.kind === 'game')) return
+  if (kind && editing === kind.id && isBoardNote(kind)) return
   if (event.button != null && event.button !== 0) return
   const note = notes.find((item) => item.id === event.currentTarget.dataset.id)
   if (!note) return
@@ -745,7 +779,7 @@ function onBoardPointerMove(event) {
   }
   if (input.value.trim() || placeKind !== 'text') {
     ghost.hidden = false
-    ghost.textContent = placeKind === 'draw' ? 'Drawing' : placeKind === 'game' ? 'Tic-tac-toe' : input.value.trim()
+    ghost.textContent = KINDS[placeKind] ? KINDS[placeKind].label : input.value.trim()
     ghost.style.background = color
     ghost.style.color = textOn(color)
   }
@@ -825,7 +859,7 @@ window.addEventListener('keydown', (event) => {
   }
   const typing = document.activeElement === input
   if (!typing && (key === 'i' || event.code === 'KeyI')) {
-    if (hovered && (hovered.kind === 'draw' || hovered.kind === 'game')) {
+    if (hovered && isBoardNote(hovered)) {
       event.preventDefault()
       if (editing === hovered.id) exitEdit()
       else enterEdit(hovered)
@@ -889,7 +923,7 @@ function tick(now) {
   }
   if (drag && keys.has('r')) {
     const note = notes.find((item) => item.id === drag.id)
-    if (note && note.kind !== 'draw' && note.kind !== 'game') {
+    if (note && !isBoardNote(note)) {
       armRotate()
       note.tilt = wrapTilt((Number(note.tilt) || 0) + 140 * dt)
       drag.tilt = note.tilt
@@ -903,7 +937,7 @@ function tick(now) {
 function syncTip(event) {
   const el = event.target.closest && event.target.closest('article.note')
   const note = el && notes.find((item) => item.id === el.dataset.id)
-  hovered = note && (note.kind === 'draw' || note.kind === 'game') ? note : null
+  hovered = note && isBoardNote(note) ? note : null
   if (!hovered || editing === hovered.id) {
     tip.hidden = true
     return
@@ -984,16 +1018,286 @@ async function playCell(id, index) {
   const status = gameStatus(marks)
   if (status.over) return
   const next = marks.slice(0, index) + status.next + marks.slice(index + 1)
+  const previous = note.marks
   note.marks = next
+  savingPlay = id
   const el = noteNodes.get(id)
   if (el) ensureGame(el, note)
   try {
     await api('?id=eq.' + id, { method: 'PATCH', body: { marks: next } })
     showError('')
   } catch (err) {
+    note.marks = previous
+    savingPlay = null
+    if (el) ensureGame(el, note)
     showError(serverMessage(err.message, 'That move is not next.'))
     loadNotes()
+  } finally {
+    if (savingPlay === id) savingPlay = null
   }
+}
+
+const MINE_COLORS = { 1: '#2563eb', 2: '#16a34a', 3: '#e11d48', 4: '#7c3aed', 5: '#b45309', 6: '#0f766e', 7: '#1c1917', 8: '#57534e' }
+
+function freshMine() {
+  const mines = Array(36).fill('0')
+  while (mines.filter((bit) => bit === '1').length < 6) mines[Math.floor(Math.random() * 36)] = '1'
+  return mines.join('') + '.'.repeat(36)
+}
+
+function freshLights() {
+  let state = '0'.repeat(25)
+  for (let n = 0; n < 12; n += 1) state = lightsTap(state, Math.floor(Math.random() * 25))
+  if (!state.includes('1')) state = lightsTap(state, 12)
+  return state
+}
+
+function freshMemo() {
+  const deck = 'aabbccddeeffgghh'.split('')
+  for (let i = deck.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const swap = deck[i]
+    deck[i] = deck[j]
+    deck[j] = swap
+  }
+  return deck.join('') + '.'.repeat(16)
+}
+
+function freshState(kind) {
+  if (kind === 'mine') return freshMine()
+  if (kind === 'lights') return freshLights()
+  if (kind === 'memo') return freshMemo()
+  return null
+}
+
+function mineParts(state) {
+  const raw = state || ''
+  return { mines: raw.slice(0, 36).padEnd(36, '0'), reveal: raw.slice(36, 72).padEnd(36, '.') }
+}
+
+function mineNeighbors(mines, index) {
+  const col = index % 6
+  const row = Math.floor(index / 6)
+  let count = 0
+  for (let r = Math.max(0, row - 1); r <= Math.min(5, row + 1); r += 1) {
+    for (let c = Math.max(0, col - 1); c <= Math.min(5, col + 1); c += 1) {
+      if ((r !== row || c !== col) && mines[r * 6 + c] === '1') count += 1
+    }
+  }
+  return count
+}
+
+function mineOpen(mines, reveal, index) {
+  const cells = reveal.split('')
+  if (cells[index] !== '.') return cells.join('')
+  if (mines[index] === '1') {
+    cells[index] = '*'
+    return cells.join('')
+  }
+  const stack = [index]
+  while (stack.length) {
+    const pos = stack.pop()
+    if (cells[pos] !== '.') continue
+    const count = mineNeighbors(mines, pos)
+    cells[pos] = String(count)
+    if (count === 0) {
+      const col = pos % 6
+      const row = Math.floor(pos / 6)
+      for (let r = Math.max(0, row - 1); r <= Math.min(5, row + 1); r += 1) {
+        for (let c = Math.max(0, col - 1); c <= Math.min(5, col + 1); c += 1) {
+          if (cells[r * 6 + c] === '.') stack.push(r * 6 + c)
+        }
+      }
+    }
+  }
+  return cells.join('')
+}
+
+function mineCleared(mines, reveal) {
+  for (let i = 0; i < 36; i += 1) {
+    if (mines[i] === '0' && !/^[0-8]$/.test(reveal[i])) return false
+  }
+  return true
+}
+
+function mineFlag(state, index) {
+  const parts = mineParts(state)
+  if (parts.reveal.includes('*') || mineCleared(parts.mines, parts.reveal)) return state
+  const cells = parts.reveal.split('')
+  if (cells[index] === '.') cells[index] = 'F'
+  else if (cells[index] === 'F') cells[index] = '.'
+  else return state
+  return parts.mines + cells.join('')
+}
+
+function mineOpenState(state, index) {
+  const parts = mineParts(state)
+  if (parts.reveal.includes('*') || mineCleared(parts.mines, parts.reveal) || parts.reveal[index] !== '.') return state
+  return parts.mines + mineOpen(parts.mines, parts.reveal, index)
+}
+
+function mineStatus(state) {
+  const parts = mineParts(state)
+  if (parts.reveal.includes('*')) return 'Boom'
+  if (mineCleared(parts.mines, parts.reveal)) return 'Clear'
+  const flags = [...parts.reveal].filter((cell) => cell === 'F').length
+  return Math.max(0, 6 - flags) + ' mines'
+}
+
+function lightsTap(state, index) {
+  const cells = state.split('')
+  const col = index % 5
+  const row = Math.floor(index / 5)
+  for (const [r, c] of [[row, col], [row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]]) {
+    if (r < 0 || c < 0 || r > 4 || c > 4) continue
+    const spot = r * 5 + c
+    cells[spot] = cells[spot] === '1' ? '0' : '1'
+  }
+  return cells.join('')
+}
+
+function memoClick(state, index) {
+  const deck = state.slice(0, 16)
+  const board = state.slice(16, 32).split('')
+  const open = []
+  board.forEach((cell, spot) => {
+    if (/[a-h]/.test(cell)) open.push(spot)
+  })
+  const clickedOpen = open.includes(index)
+  if (open.length >= 2) {
+    const same = board[open[0]] === board[open[1]]
+    board[open[0]] = same ? board[open[0]].toUpperCase() : '.'
+    board[open[1]] = same ? board[open[1]].toUpperCase() : '.'
+  }
+  if (!clickedOpen && board[index] === '.') board[index] = deck[index]
+  return deck + board.join('')
+}
+
+function playStatus(note) {
+  if (note.kind === 'mine') return mineStatus(note.state)
+  if (note.kind === 'lights') {
+    const on = [...(note.state || '')].filter((cell) => cell === '1').length
+    return on ? on + ' on' : 'Clear'
+  }
+  const matched = [...(note.state || '').slice(16, 32)].filter((cell) => cell >= 'A' && cell <= 'H').length / 2
+  return matched === 8 ? 'Matched' : matched + '/8 pairs'
+}
+
+function ensurePlay(el, note) {
+  const size = note.kind === 'mine' ? 36 : note.kind === 'lights' ? 25 : 16
+  let grid = el.querySelector('.grid')
+  if (!grid) {
+    grid = document.createElement('div')
+    grid.className = 'grid'
+    for (let i = 0; i < size; i += 1) {
+      const cell = document.createElement('button')
+      cell.type = 'button'
+      cell.className = 'cell'
+      cell.addEventListener('pointerdown', (event) => {
+        if (editing === el.dataset.id) event.stopPropagation()
+      })
+      cell.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const current = notes.find((item) => item.id === el.dataset.id)
+        if (!current || editing !== current.id) return
+        if (current.kind === 'mine') playMine(current, i, flagMode ? 'flag' : 'open')
+        else if (current.kind === 'lights') playLights(current, i)
+        else playMemo(current, i)
+      })
+      cell.addEventListener('contextmenu', (event) => {
+        if (editing !== el.dataset.id) return
+        event.preventDefault()
+        const current = notes.find((item) => item.id === el.dataset.id)
+        if (current && current.kind === 'mine') playMine(current, i, 'flag')
+      })
+      grid.appendChild(cell)
+    }
+    const turn = document.createElement('span')
+    turn.className = 'turn'
+    const flagBtn = document.createElement('button')
+    flagBtn.type = 'button'
+    flagBtn.className = 'flagmode'
+    flagBtn.textContent = 'Flag'
+    flagBtn.addEventListener('pointerdown', (event) => event.stopPropagation())
+    flagBtn.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      flagMode = !flagMode
+      flagBtn.classList.toggle('on', flagMode)
+    })
+    el.insertBefore(grid, el.firstChild)
+    el.append(turn, flagBtn)
+    ensureWhere(el)
+  }
+  const flagBtn = el.querySelector('.flagmode')
+  flagBtn.hidden = note.kind !== 'mine' || editing !== note.id
+  flagBtn.classList.toggle('on', flagMode)
+  if (note.kind === 'mine') {
+    const parts = mineParts(note.state)
+    ;[...grid.children].forEach((cell, index) => {
+      const mark = parts.reveal[index]
+      const open = /^[0-8]$/.test(mark)
+      cell.className = 'cell' + (mark === '*' ? ' boom' : mark === 'F' ? ' flag' : open ? ' open' : ' hidden')
+      cell.textContent = mark === 'F' ? '\u2691' : mark === '*' ? '\u2022' : open && mark !== '0' ? mark : ''
+      cell.style.color = MINE_COLORS[mark] || ''
+    })
+  } else if (note.kind === 'lights') {
+    const bits = (note.state || '').padEnd(25, '0')
+    ;[...grid.children].forEach((cell, index) => {
+      cell.className = 'cell ' + (bits[index] === '1' ? 'on' : 'off')
+      cell.textContent = ''
+      cell.style.color = ''
+    })
+  } else {
+    const boardFace = (note.state || '').slice(16, 32).padEnd(16, '.')
+    ;[...grid.children].forEach((cell, index) => {
+      const mark = boardFace[index]
+      const matched = mark >= 'A' && mark <= 'H'
+      cell.className = 'cell' + (mark === '.' ? ' down' : matched ? ' matched' : ' up')
+      cell.textContent = mark === '.' ? '' : mark.toUpperCase()
+      cell.style.color = ''
+    })
+  }
+  el.querySelector('.turn').textContent = playStatus(note)
+}
+
+async function saveState(note, next) {
+  if (!next || next === note.state) return
+  const previous = note.state
+  note.state = next
+  savingPlay = note.id
+  const el = noteNodes.get(note.id)
+  if (el) ensurePlay(el, note)
+  try {
+    await api('?id=eq.' + note.id, { method: 'PATCH', body: { state: next } })
+    showError('')
+  } catch (err) {
+    note.state = previous
+    savingPlay = null
+    if (el) ensurePlay(el, note)
+    showError(serverMessage(err.message, 'That move is not next.'))
+    loadNotes()
+  } finally {
+    if (savingPlay === note.id) savingPlay = null
+  }
+}
+
+function playMine(note, index, mode) {
+  if (editing !== note.id) return
+  saveState(note, mode === 'flag' ? mineFlag(note.state, index) : mineOpenState(note.state, index))
+}
+
+function playLights(note, index) {
+  if (editing !== note.id || !(note.state || '').includes('1')) return
+  saveState(note, lightsTap(note.state, index))
+}
+
+function playMemo(note, index) {
+  if (editing !== note.id) return
+  const face = (note.state || '').slice(16, 32)
+  if (/^[A-H]{16}$/.test(face)) return
+  saveState(note, memoClick(note.state, index))
 }
 
 function ensureCanvas(el) {
@@ -1178,8 +1482,9 @@ async function placeSpecial(event) {
   lastPlace = now
   const spot = pointer || worldFromEvent(event)
   const kind = placeKind
+  const spec = KINDS[kind]
   const draft = {
-    body: kind === 'draw' ? 'Drawing' : 'Tic-tac-toe',
+    body: spec.label,
     color,
     x: spot.x,
     y: spot.y,
@@ -1187,6 +1492,7 @@ async function placeSpecial(event) {
     tilt: 0,
     kind,
     marks: kind === 'game' ? '         ' : null,
+    state: freshState(kind),
     client_id: clientId(),
   }
   try {
@@ -1214,6 +1520,10 @@ function stopFollowing() {
   savedView = null
   board.classList.remove('editing')
   paintbar.hidden = true
+  for (const note of notes) {
+    const el = noteNodes.get(note.id)
+    if (el && (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo')) ensurePlay(el, note)
+  }
 }
 
 function enterEdit(note) {
@@ -1224,6 +1534,7 @@ function enterEdit(note) {
   tip.hidden = true
   const el = noteNodes.get(note.id)
   if (el && note.kind === 'game') ensureGame(el, note)
+  if (el && (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo')) ensurePlay(el, note)
 }
 
 function exitEdit() {
@@ -1231,9 +1542,10 @@ function exitEdit() {
   board.classList.remove('editing')
   paintbar.hidden = true
   for (const note of notes) {
-    if (note.kind !== 'game') continue
     const el = noteNodes.get(note.id)
-    if (el) ensureGame(el, note)
+    if (!el) continue
+    if (note.kind === 'game') ensureGame(el, note)
+    if (note.kind === 'mine' || note.kind === 'lights' || note.kind === 'memo') ensurePlay(el, note)
   }
 }
 
@@ -1271,16 +1583,13 @@ function glideCamera(dt) {
   }
 }
 
-drawBtn.addEventListener('click', () => {
-  placeKind = placeKind === 'draw' ? 'text' : 'draw'
-  if (placeKind !== 'text') input.value = ''
-  updateComposer()
-})
-gameBtn.addEventListener('click', () => {
-  placeKind = placeKind === 'game' ? 'text' : 'game'
-  if (placeKind !== 'text') input.value = ''
-  updateComposer()
-})
+for (const button of document.querySelectorAll('.specials button')) {
+  button.addEventListener('click', () => {
+    placeKind = placeKind === button.dataset.kind ? 'text' : button.dataset.kind
+    if (placeKind !== 'text') input.value = ''
+    updateComposer()
+  })
+}
 paintbar.addEventListener('pointerdown', (event) => {
   event.stopPropagation()
 })
