@@ -448,7 +448,7 @@ async function place(event) {
     blockPlace = false
     return
   }
-  if (drag || pan) return
+  if (drag || pan || editing) return
   if (event.target.closest('article.note') || event.target.closest('.paintbar')) return
   if (placeKind === 'draw' || placeKind === 'game') {
     placeSpecial(event)
@@ -738,7 +738,11 @@ function onBoardPointerDown(event) {
 
 function onBoardPointerMove(event) {
   pointer = worldFromEvent(event)
-  syncTip(event)
+  try {
+    syncTip(event)
+  } catch (err) {
+    /* A tooltip problem should not stop the wall from moving. */
+  }
   if (input.value.trim() || placeKind !== 'text') {
     ghost.hidden = false
     ghost.textContent = placeKind === 'draw' ? 'Drawing' : placeKind === 'game' ? 'Tic-tac-toe' : input.value.trim()
@@ -753,6 +757,7 @@ function onBoardPointerMove(event) {
     pan.travel = (pan.travel || 0) + Math.hypot(dx, dy)
     if (pan.travel > 5) pan.moved = true
     if (pan.moved) {
+      stopFollowing()
       camera.x -= dx / camera.zoom
       camera.y -= dy / camera.zoom
       board.classList.add('panning')
@@ -834,9 +839,9 @@ window.addEventListener('keydown', (event) => {
       event.preventDefault()
       armRotate()
     }
-    if (drag || document.activeElement === input) return
+    if (drag || (document.activeElement === input && input.value.trim())) return
   }
-  if (document.activeElement === input) return
+  if (document.activeElement === input && input.value.trim()) return
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
     keys.add(key)
     event.preventDefault()
@@ -865,13 +870,18 @@ function tick(now) {
   if (keys.has('s') || keys.has('arrowdown')) my += 1
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1
   if (keys.has('d') || keys.has('arrowright')) mx += 1
-  if (!editing && (mx || my)) {
+  if (mx || my) {
+    stopFollowing()
     camera.x += (mx * 760 * dt) / camera.zoom
     camera.y += (my * 760 * dt) / camera.zoom
     layout()
     publishSoon()
   }
-  glideCamera(dt)
+  try {
+    glideCamera(dt)
+  } catch (err) {
+    /* Zooming back out should not stop WASD. */
+  }
   if (drag && keys.has('r')) {
     const note = notes.find((item) => item.id === drag.id)
     if (note && note.kind !== 'draw' && note.kind !== 'game') {
@@ -884,6 +894,407 @@ function tick(now) {
   }
   requestAnimationFrame(tick)
 }
+
+function syncTip(event) {
+  const el = event.target.closest && event.target.closest('article.note')
+  const note = el && notes.find((item) => item.id === el.dataset.id)
+  hovered = note && (note.kind === 'draw' || note.kind === 'game') ? note : null
+  if (!hovered || editing === hovered.id) {
+    tip.hidden = true
+    return
+  }
+  tip.hidden = false
+  tip.textContent = hovered.kind === 'draw' ? 'Press I to draw' : 'Press I to play'
+  tip.style.left = event.clientX + 14 + 'px'
+  tip.style.top = event.clientY + 18 + 'px'
+}
+
+function ensureWhere(el) {
+  if (el.querySelector('.where')) return
+  const where = document.createElement('span')
+  where.className = 'where'
+  el.appendChild(where)
+}
+
+function gameStatus(marks) {
+  const cells = (marks || '         ').padEnd(9, ' ').slice(0, 9)
+  const lines = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ]
+  for (const [a, b, c] of lines) {
+    if (cells[a] !== ' ' && cells[a] === cells[b] && cells[a] === cells[c]) return { over: cells[a] }
+  }
+  if (![...cells].includes(' ')) return { over: 'draw' }
+  const xs = [...cells].filter((cell) => cell === 'X').length
+  const os = [...cells].filter((cell) => cell === 'O').length
+  return { next: xs <= os ? 'X' : 'O' }
+}
+
+function ensureGame(el, note) {
+  let grid = el.querySelector('.grid')
+  if (!grid) {
+    grid = document.createElement('div')
+    grid.className = 'grid'
+    for (let i = 0; i < 9; i += 1) {
+      const cell = document.createElement('button')
+      cell.type = 'button'
+      cell.className = 'cell'
+      cell.addEventListener('pointerdown', (event) => {
+        if (editing === el.dataset.id) event.stopPropagation()
+      })
+      cell.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        playCell(el.dataset.id, i)
+      })
+      grid.appendChild(cell)
+    }
+    const turn = document.createElement('span')
+    turn.className = 'turn'
+    el.insertBefore(grid, el.firstChild)
+    el.appendChild(turn)
+    ensureWhere(el)
+  }
+  const marks = (note.marks || '         ').padEnd(9, ' ').slice(0, 9)
+  const status = gameStatus(marks)
+  ;[...grid.children].forEach((cell, index) => {
+    cell.textContent = marks[index] === ' ' ? '' : marks[index]
+  })
+  const turn = el.querySelector('.turn')
+  turn.textContent = status.over === 'draw' ? 'Draw' : status.over ? status.over + ' wins' : status.next + ' plays'
+}
+
+async function playCell(id, index) {
+  const note = notes.find((item) => item.id === id)
+  if (!note || editing !== id) return
+  const marks = (note.marks || '         ').padEnd(9, ' ').slice(0, 9)
+  if (marks[index] !== ' ') return
+  const status = gameStatus(marks)
+  if (status.over) return
+  const next = marks.slice(0, index) + status.next + marks.slice(index + 1)
+  note.marks = next
+  const el = noteNodes.get(id)
+  if (el) ensureGame(el, note)
+  try {
+    await api('?id=eq.' + id, { method: 'PATCH', body: { marks: next } })
+    showError('')
+  } catch (err) {
+    showError(serverMessage(err.message, 'That move is not next.'))
+    loadNotes()
+  }
+}
+
+function ensureCanvas(el) {
+  if (el.querySelector('canvas')) return
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  canvas.addEventListener('pointerdown', (event) => {
+    if (editing !== el.dataset.id) return
+    event.preventDefault()
+    event.stopPropagation()
+    const point = canvasPoint(event, canvas)
+    drawingStroke = {
+      id: crypto.randomUUID(),
+      note_id: el.dataset.id,
+      client_id: clientId(),
+      color: ink,
+      size: brush,
+      eraser: eraserOn,
+      points: [[point.x, point.y]],
+    }
+    paintCoords.textContent = point.x + ', ' + point.y
+    try {
+      canvas.setPointerCapture(event.pointerId)
+    } catch (err) {
+      /* Window listeners still follow the pointer. */
+    }
+    redrawNote(el.dataset.id)
+    window.addEventListener('pointermove', moveStroke)
+    window.addEventListener('pointerup', endStroke)
+    window.addEventListener('pointercancel', endStroke)
+  })
+  canvas.addEventListener('pointermove', (event) => {
+    if (editing !== el.dataset.id) return
+    const point = canvasPoint(event, canvas)
+    paintCoords.textContent = point.x + ', ' + point.y
+  })
+  el.insertBefore(canvas, el.firstChild)
+  ensureWhere(el)
+}
+
+function canvasPoint(event, canvas) {
+  const rect = canvas.getBoundingClientRect()
+  const x = rect.width ? ((event.clientX - rect.left) / rect.width) * 256 : 0
+  const y = rect.height ? ((event.clientY - rect.top) / rect.height) * 256 : 0
+  return { x: clamp(Math.round(x), 0, 255), y: clamp(Math.round(y), 0, 255) }
+}
+
+function drawStroke(ctx, stroke) {
+  const points = stroke.points || []
+  if (!points.length) return
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = Number(stroke.size) || 4
+  if (stroke.eraser) {
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.strokeStyle = 'rgba(0,0,0,1)'
+  } else {
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.strokeStyle = stroke.color || '#1C1917'
+  }
+  ctx.beginPath()
+  ctx.moveTo(points[0][0], points[0][1])
+  if (points.length === 1) ctx.lineTo(points[0][0] + 0.01, points[0][1])
+  else points.slice(1).forEach((point) => ctx.lineTo(point[0], point[1]))
+  ctx.stroke()
+  ctx.restore()
+}
+
+function redrawNote(id) {
+  const el = noteNodes.get(id)
+  const canvas = el && el.querySelector('canvas')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, 256, 256)
+  for (const stroke of strokes.get(id) || []) drawStroke(ctx, stroke)
+  if (drawingStroke && drawingStroke.note_id === id) drawStroke(ctx, drawingStroke)
+}
+
+function addStroke(row) {
+  if (!row || !row.id || seenStrokes.has(row.id)) return
+  seenStrokes.add(row.id)
+  const list = strokes.get(row.note_id) || []
+  list.push(row)
+  strokes.set(row.note_id, list)
+  if (row.created_at && row.created_at > strokeCursor) strokeCursor = row.created_at
+  redrawNote(row.note_id)
+}
+
+async function loadNewStrokes() {
+  const ids = notes.filter((note) => note.kind === 'draw').map((note) => note.id)
+  if (!ids.length) return
+  try {
+    const rows = await api(
+      '?select=id,note_id,color,size,eraser,points,created_at&note_id=in.(' +
+        ids.join(',') +
+        ')&created_at=gt.' +
+        encodeURIComponent(strokeCursor) +
+        '&order=created_at.asc&limit=2000',
+      { method: 'GET', table: 'strokes' },
+    )
+    for (const row of rows || []) addStroke(row)
+  } catch (err) {
+    /* The next poll tries again. */
+  }
+}
+
+function moveStroke(event) {
+  if (!drawingStroke) return
+  const el = noteNodes.get(drawingStroke.note_id)
+  const canvas = el && el.querySelector('canvas')
+  if (!canvas) return
+  const point = canvasPoint(event, canvas)
+  paintCoords.textContent = point.x + ', ' + point.y
+  const last = drawingStroke.points[drawingStroke.points.length - 1]
+  if (last[0] !== point.x || last[1] !== point.y) drawingStroke.points.push([point.x, point.y])
+  if (drawingStroke.points.length >= 180) {
+    const keep = drawingStroke.points[drawingStroke.points.length - 1]
+    const next = {
+      id: crypto.randomUUID(),
+      note_id: drawingStroke.note_id,
+      client_id: drawingStroke.client_id,
+      color: drawingStroke.color,
+      size: drawingStroke.size,
+      eraser: drawingStroke.eraser,
+      points: [[keep[0], keep[1]]],
+    }
+    endStroke()
+    drawingStroke = next
+    window.addEventListener('pointermove', moveStroke)
+    window.addEventListener('pointerup', endStroke)
+    window.addEventListener('pointercancel', endStroke)
+  }
+  if (drawingStroke) redrawNote(drawingStroke.note_id)
+}
+
+function endStroke() {
+  window.removeEventListener('pointermove', moveStroke)
+  window.removeEventListener('pointerup', endStroke)
+  window.removeEventListener('pointercancel', endStroke)
+  finishStroke()
+}
+
+async function finishStroke() {
+  if (!drawingStroke || !drawingStroke.points.length) {
+    drawingStroke = null
+    return
+  }
+  const stroke = drawingStroke
+  drawingStroke = null
+  addStroke(stroke)
+  if (room) {
+    room.send({
+      type: 'broadcast',
+      event: 'stroke',
+      payload: {
+        id: stroke.id,
+        note_id: stroke.note_id,
+        color: stroke.color,
+        size: stroke.size,
+        eraser: stroke.eraser,
+        points: stroke.points,
+      },
+    })
+  }
+  try {
+    await api('', { method: 'POST', table: 'strokes', body: stroke })
+  } catch (err) {
+    showError('That stroke did not save.')
+  }
+}
+
+async function placeSpecial(event) {
+  if (waitLeft(ADD_WAIT) > 0) {
+    showError('Wait 10 seconds before another note.')
+    updateComposer()
+    return
+  }
+  const now = Date.now()
+  if (now - lastPlace < 400) return
+  lastPlace = now
+  const spot = pointer || worldFromEvent(event)
+  const kind = placeKind
+  const draft = {
+    body: kind === 'draw' ? 'Drawing' : 'Tic-tac-toe',
+    color,
+    x: spot.x,
+    y: spot.y,
+    z: nextZ(),
+    tilt: 0,
+    kind,
+    marks: kind === 'game' ? '         ' : null,
+    client_id: clientId(),
+  }
+  try {
+    const created = await api('', { method: 'POST', body: draft })
+    const note = Array.isArray(created) ? created[0] : created
+    notes.push(note)
+    lastSignature = ''
+    markWait(ADD_WAIT)
+    placeKind = 'text'
+    showError('')
+    updateComposer()
+    render()
+    enterEdit(note)
+  } catch (err) {
+    const message = serverMessage(err.message, 'That note did not stick. Wait 10 seconds and try again.')
+    if (/wait|second|minute/i.test(message)) markWait(ADD_WAIT)
+    showError(message)
+    updateComposer()
+  }
+}
+
+function stopFollowing() {
+  if (!editing && !savedView) return
+  editing = null
+  savedView = null
+  board.classList.remove('editing')
+  paintbar.hidden = true
+}
+
+function enterEdit(note) {
+  if (!savedView) savedView = { x: camera.x, y: camera.y, zoom: camera.zoom }
+  editing = note.id
+  board.classList.add('editing')
+  paintbar.hidden = note.kind !== 'draw'
+  tip.hidden = true
+  const el = noteNodes.get(note.id)
+  if (el && note.kind === 'game') ensureGame(el, note)
+}
+
+function exitEdit() {
+  editing = null
+  board.classList.remove('editing')
+  paintbar.hidden = true
+  for (const note of notes) {
+    if (note.kind !== 'game') continue
+    const el = noteNodes.get(note.id)
+    if (el) ensureGame(el, note)
+  }
+}
+
+function glideCamera(dt) {
+  let target = null
+  if (editing) {
+    const note = notes.find((item) => item.id === editing)
+    if (!note) {
+      exitEdit()
+      return
+    }
+    const rect = board.getBoundingClientRect()
+    const zoom = clamp((Math.min(rect.width, rect.height) * 0.82) / 256, 1.15, MAX_ZOOM)
+    target = {
+      x: note.x - rect.width / (2 * zoom),
+      y: note.y - rect.height / (2 * zoom),
+      zoom,
+    }
+  } else if (savedView) {
+    target = savedView
+  } else {
+    return
+  }
+  const step = Math.min(1, dt * 7)
+  camera.x += (target.x - camera.x) * step
+  camera.y += (target.y - camera.y) * step
+  camera.zoom += (target.zoom - camera.zoom) * step
+  layout()
+  if (!editing && Math.hypot(camera.x - target.x, camera.y - target.y) < 2 && Math.abs(camera.zoom - target.zoom) < 0.02) {
+    camera.x = target.x
+    camera.y = target.y
+    camera.zoom = target.zoom
+    savedView = null
+    layout()
+  }
+}
+
+drawBtn.addEventListener('click', () => {
+  placeKind = placeKind === 'draw' ? 'text' : 'draw'
+  if (placeKind !== 'text') input.value = ''
+  updateComposer()
+})
+gameBtn.addEventListener('click', () => {
+  placeKind = placeKind === 'game' ? 'text' : 'game'
+  if (placeKind !== 'text') input.value = ''
+  updateComposer()
+})
+paintbar.addEventListener('click', (event) => {
+  const inkButton = event.target.closest('.ink')
+  const sizeButton = event.target.closest('.size')
+  if (inkButton) {
+    ink = inkButton.dataset.ink
+    eraserOn = false
+    document.getElementById('eraser').classList.remove('on')
+    for (const button of paintbar.querySelectorAll('.ink')) button.classList.toggle('on', button === inkButton)
+  }
+  if (sizeButton) {
+    brush = Number(sizeButton.dataset.size)
+    for (const button of paintbar.querySelectorAll('.size')) button.classList.toggle('on', button === sizeButton)
+  }
+})
+document.getElementById('eraser').addEventListener('click', () => {
+  eraserOn = !eraserOn
+  document.getElementById('eraser').classList.toggle('on', eraserOn)
+})
+document.getElementById('paint-done').addEventListener('click', () => exitEdit())
 
 buildColors()
 updateComposer()

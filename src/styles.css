@@ -236,6 +236,11 @@ body.dragging-note * {
   cursor: inherit;
 }
 
+.board.editing .note.draw,
+.board.editing .note.game {
+  pointer-events: auto;
+}
+
 .board.editing .note.draw canvas {
   cursor: crosshair;
 }
