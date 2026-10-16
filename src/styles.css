@@ -842,13 +842,23 @@ body.resizing-note * {
   right: 12px;
   bottom: calc(100% + 8px);
   z-index: 2;
+  max-height: 280px;
   margin: 0;
   padding: 6px;
+  overflow: auto;
   list-style: none;
   border: 1px solid #eeebe6;
   border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 16px 40px rgba(28, 25, 23, 0.12);
+}
+
+.suggest-pic {
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .suggest li {

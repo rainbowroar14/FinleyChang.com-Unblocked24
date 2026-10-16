@@ -31,6 +31,8 @@ jobs:
           mkdir site/src
           cp src/board.js src/styles.css site/src/
           cp maxwell.png doge.png cheems.png pog.png sadcat.png site/
+          mkdir site/emotes
+          cp emotes/*.png site/emotes/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

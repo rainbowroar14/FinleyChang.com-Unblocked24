@@ -83,6 +83,56 @@ const STICKERS = {
   cheems: 'cheems.png',
   pog: 'pog.png',
   sadcat: 'sadcat.png',
+  dcolon: 'emotes/dcolon.png',
+  cinema: 'emotes/cinema.png',
+  hamster: 'emotes/hamster.png',
+  kappa: 'emotes/kappa.png',
+  keepo: 'emotes/keepo.png',
+  lul: 'emotes/lul.png',
+  fourhead: 'emotes/fourhead.png',
+  fivehead: 'emotes/fivehead.png',
+  trihard: 'emotes/trihard.png',
+  coolcat: 'emotes/coolcat.png',
+  frankerz: 'emotes/frankerz.png',
+  heyguys: 'emotes/heyguys.png',
+  elegiggle: 'emotes/elegiggle.png',
+  failfish: 'emotes/failfish.png',
+  babyrage: 'emotes/babyrage.png',
+  cmonbruh: 'emotes/cmonbruh.png',
+  dansgame: 'emotes/dansgame.png',
+  sleeper: 'emotes/sleeper.png',
+  wutface: 'emotes/wutface.png',
+  notlikethis: 'emotes/notlikethis.png',
+  pjsalt: 'emotes/pjsalt.png',
+  swiftrage: 'emotes/swiftrage.png',
+  minglee: 'emotes/minglee.png',
+  kappapride: 'emotes/kappapride.png',
+  vohiyo: 'emotes/vohiyo.png',
+  seemsgood: 'emotes/seemsgood.png',
+  bleedpurple: 'emotes/bleedpurple.png',
+  unity: 'emotes/unity.png',
+  kekw: 'emotes/kekw.png',
+  monkas: 'emotes/monkas.png',
+  monkaw: 'emotes/monkaw.png',
+  monkahmm: 'emotes/monkahmm.png',
+  sadge: 'emotes/sadge.png',
+  madge: 'emotes/madge.png',
+  prayge: 'emotes/prayge.png',
+  okayge: 'emotes/okayge.png',
+  pepehands: 'emotes/pepehands.png',
+  pepelaugh: 'emotes/pepelaugh.png',
+  pepega: 'emotes/pepega.png',
+  peepohappy: 'emotes/peepohappy.png',
+  peeposad: 'emotes/peeposad.png',
+  poggers: 'emotes/poggers.png',
+  hypers: 'emotes/hypers.png',
+  pausechamp: 'emotes/pausechamp.png',
+  widepeepo: 'emotes/widepeepo.png',
+  copium: 'emotes/copium.png',
+  weirdchamp: 'emotes/weirdchamp.png',
+  coggers: 'emotes/coggers.png',
+  gigachad: 'emotes/gigachad.png',
+  based: 'emotes/based.png',
 }
 const STICKER_LABELS = {
   maxwell: 'Maxwell',
@@ -90,6 +140,56 @@ const STICKER_LABELS = {
   cheems: 'Cheems',
   pog: 'Pog',
   sadcat: 'Sad cat',
+  dcolon: 'D:',
+  cinema: 'Absolute cinema',
+  hamster: 'Crying hamster',
+  kappa: 'Kappa',
+  keepo: 'Keepo',
+  lul: 'LUL',
+  fourhead: '4Head',
+  fivehead: '5Head',
+  trihard: 'TriHard',
+  coolcat: 'CoolCat',
+  frankerz: 'FrankerZ',
+  heyguys: 'HeyGuys',
+  elegiggle: 'EleGiggle',
+  failfish: 'FailFish',
+  babyrage: 'BabyRage',
+  cmonbruh: 'cmonBruh',
+  dansgame: 'DansGame',
+  sleeper: 'ResidentSleeper',
+  wutface: 'WutFace',
+  notlikethis: 'NotLikeThis',
+  pjsalt: 'PJSalt',
+  swiftrage: 'SwiftRage',
+  minglee: 'MingLee',
+  kappapride: 'KappaPride',
+  vohiyo: 'VoHiYo',
+  seemsgood: 'SeemsGood',
+  bleedpurple: 'BleedPurple',
+  unity: 'TwitchUnity',
+  kekw: 'KEKW',
+  monkas: 'monkaS',
+  monkaw: 'monkaW',
+  monkahmm: 'monkaHmm',
+  sadge: 'Sadge',
+  madge: 'Madge',
+  prayge: 'Prayge',
+  okayge: 'Okayge',
+  pepehands: 'PepeHands',
+  pepelaugh: 'PepeLaugh',
+  pepega: 'Pepega',
+  peepohappy: 'peepoHappy',
+  peeposad: 'peepoSad',
+  poggers: 'POGGERS',
+  hypers: 'HYPERS',
+  pausechamp: 'PauseChamp',
+  widepeepo: 'widepeepoHappy',
+  copium: 'Copium',
+  weirdchamp: 'WeirdChamp',
+  coggers: 'COGGERS',
+  gigachad: 'Gigachad',
+  based: 'Based',
 }
 const COMMANDS = [
   { cmd: '/draw', kind: 'draw' },
@@ -103,6 +203,56 @@ const COMMANDS = [
   { cmd: '/cheems', kind: 'sticker', sticker: 'cheems', label: 'Cheems' },
   { cmd: '/pog', kind: 'sticker', sticker: 'pog', label: 'Pog' },
   { cmd: '/sadcat', kind: 'sticker', sticker: 'sadcat', label: 'Sad cat' },
+  { cmd: '/dcolon', kind: 'sticker', sticker: 'dcolon', label: 'D:' },
+  { cmd: '/cinema', kind: 'sticker', sticker: 'cinema', label: 'Absolute cinema' },
+  { cmd: '/hamster', kind: 'sticker', sticker: 'hamster', label: 'Crying hamster' },
+  { cmd: '/kappa', kind: 'sticker', sticker: 'kappa', label: 'Kappa' },
+  { cmd: '/keepo', kind: 'sticker', sticker: 'keepo', label: 'Keepo' },
+  { cmd: '/lul', kind: 'sticker', sticker: 'lul', label: 'LUL' },
+  { cmd: '/4head', kind: 'sticker', sticker: 'fourhead', label: '4Head' },
+  { cmd: '/5head', kind: 'sticker', sticker: 'fivehead', label: '5Head' },
+  { cmd: '/trihard', kind: 'sticker', sticker: 'trihard', label: 'TriHard' },
+  { cmd: '/coolcat', kind: 'sticker', sticker: 'coolcat', label: 'CoolCat' },
+  { cmd: '/frankerz', kind: 'sticker', sticker: 'frankerz', label: 'FrankerZ' },
+  { cmd: '/heyguys', kind: 'sticker', sticker: 'heyguys', label: 'HeyGuys' },
+  { cmd: '/elegiggle', kind: 'sticker', sticker: 'elegiggle', label: 'EleGiggle' },
+  { cmd: '/failfish', kind: 'sticker', sticker: 'failfish', label: 'FailFish' },
+  { cmd: '/babyrage', kind: 'sticker', sticker: 'babyrage', label: 'BabyRage' },
+  { cmd: '/cmonbruh', kind: 'sticker', sticker: 'cmonbruh', label: 'cmonBruh' },
+  { cmd: '/dansgame', kind: 'sticker', sticker: 'dansgame', label: 'DansGame' },
+  { cmd: '/sleeper', kind: 'sticker', sticker: 'sleeper', label: 'ResidentSleeper' },
+  { cmd: '/wutface', kind: 'sticker', sticker: 'wutface', label: 'WutFace' },
+  { cmd: '/notlikethis', kind: 'sticker', sticker: 'notlikethis', label: 'NotLikeThis' },
+  { cmd: '/pjsalt', kind: 'sticker', sticker: 'pjsalt', label: 'PJSalt' },
+  { cmd: '/swiftrage', kind: 'sticker', sticker: 'swiftrage', label: 'SwiftRage' },
+  { cmd: '/minglee', kind: 'sticker', sticker: 'minglee', label: 'MingLee' },
+  { cmd: '/kappapride', kind: 'sticker', sticker: 'kappapride', label: 'KappaPride' },
+  { cmd: '/vohiyo', kind: 'sticker', sticker: 'vohiyo', label: 'VoHiYo' },
+  { cmd: '/seemsgood', kind: 'sticker', sticker: 'seemsgood', label: 'SeemsGood' },
+  { cmd: '/bleedpurple', kind: 'sticker', sticker: 'bleedpurple', label: 'BleedPurple' },
+  { cmd: '/unity', kind: 'sticker', sticker: 'unity', label: 'TwitchUnity' },
+  { cmd: '/kekw', kind: 'sticker', sticker: 'kekw', label: 'KEKW' },
+  { cmd: '/monkas', kind: 'sticker', sticker: 'monkas', label: 'monkaS' },
+  { cmd: '/monkaw', kind: 'sticker', sticker: 'monkaw', label: 'monkaW' },
+  { cmd: '/monkahmm', kind: 'sticker', sticker: 'monkahmm', label: 'monkaHmm' },
+  { cmd: '/sadge', kind: 'sticker', sticker: 'sadge', label: 'Sadge' },
+  { cmd: '/madge', kind: 'sticker', sticker: 'madge', label: 'Madge' },
+  { cmd: '/prayge', kind: 'sticker', sticker: 'prayge', label: 'Prayge' },
+  { cmd: '/okayge', kind: 'sticker', sticker: 'okayge', label: 'Okayge' },
+  { cmd: '/pepehands', kind: 'sticker', sticker: 'pepehands', label: 'PepeHands' },
+  { cmd: '/pepelaugh', kind: 'sticker', sticker: 'pepelaugh', label: 'PepeLaugh' },
+  { cmd: '/pepega', kind: 'sticker', sticker: 'pepega', label: 'Pepega' },
+  { cmd: '/peepohappy', kind: 'sticker', sticker: 'peepohappy', label: 'peepoHappy' },
+  { cmd: '/peeposad', kind: 'sticker', sticker: 'peeposad', label: 'peepoSad' },
+  { cmd: '/poggers', kind: 'sticker', sticker: 'poggers', label: 'POGGERS' },
+  { cmd: '/hypers', kind: 'sticker', sticker: 'hypers', label: 'HYPERS' },
+  { cmd: '/pausechamp', kind: 'sticker', sticker: 'pausechamp', label: 'PauseChamp' },
+  { cmd: '/widepeepo', kind: 'sticker', sticker: 'widepeepo', label: 'widepeepoHappy' },
+  { cmd: '/copium', kind: 'sticker', sticker: 'copium', label: 'Copium' },
+  { cmd: '/weirdchamp', kind: 'sticker', sticker: 'weirdchamp', label: 'WeirdChamp' },
+  { cmd: '/coggers', kind: 'sticker', sticker: 'coggers', label: 'COGGERS' },
+  { cmd: '/gigachad', kind: 'sticker', sticker: 'gigachad', label: 'Gigachad' },
+  { cmd: '/based', kind: 'sticker', sticker: 'based', label: 'Based' },
   { cmd: '/circle', shape: 'circle', label: 'Circle' },
   { cmd: '/star', shape: 'star', label: 'Star' },
   { cmd: '/thought', shape: 'thought', label: 'Thought bubble' },
@@ -658,7 +808,7 @@ function updateComposer() {
           ? 'Click the wall to stick this ' + shapeName + '.'
           : placeShape !== 'card'
             ? 'Type the note. It will be a ' + shapeName + '. /card makes a normal sticky note.'
-            : 'Type / for a shape, a drawing, a game, or the table.'
+            : 'Type / for a sticker, a shape, a game, or the table.'
   if (hintText.textContent !== nextHint) hintText.textContent = nextHint
   syncGhost()
   publishSoon()
@@ -766,7 +916,14 @@ function renderSuggest(matches) {
   matches.forEach((item, index) => {
     const row = document.createElement('li')
     if (index === 0) row.className = 'top'
-    row.textContent = commandTitle(item)
+    if (item.sticker && STICKERS[item.sticker]) {
+      const img = document.createElement('img')
+      img.className = 'suggest-pic'
+      img.alt = ''
+      img.src = STICKERS[item.sticker]
+      row.appendChild(img)
+    }
+    row.appendChild(document.createTextNode(commandTitle(item)))
     row.addEventListener('pointerdown', (event) => {
       event.preventDefault()
       chooseCommand(item)
@@ -1502,7 +1659,7 @@ input.addEventListener('input', () => {
   if (raw.startsWith('/')) {
     const matches = commandMatches()
     const exact = matches.find((item) => item.cmd === raw)
-    if (exact && matches.length === 1) {
+    if (exact) {
       chooseCommand(exact)
       return
     }
