@@ -1595,7 +1595,7 @@ board.addEventListener('click', place)
 window.addEventListener(
   'wheel',
   (event) => {
-    if (event.target.closest && event.target.closest('input, label.custom')) return
+    if (event.target.closest && event.target.closest('input, label.custom, #suggest')) return
     event.preventDefault()
     const rect = board.getBoundingClientRect()
     const sx = event.clientX - rect.left
