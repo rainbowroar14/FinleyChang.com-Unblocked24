@@ -597,6 +597,24 @@ body.resizing-note * {
   pointer-events: none;
 }
 
+#theme {
+  pointer-events: auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1c1917;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(28, 25, 23, 0.08);
+}
+
+#theme[aria-pressed='true'] {
+  background: #1c1917;
+  color: #fffef8;
+}
+
 #name-input {
   width: 132px;
   pointer-events: auto;
@@ -988,6 +1006,89 @@ body.resizing-note * {
   margin-top: 10px;
   color: #78716c;
   font-size: 13px;
+}
+
+html.dark {
+  color: #f5f5f4;
+  background: #0c0a09;
+}
+
+html.dark .app {
+  background: #0c0a09;
+}
+
+html.dark .mark {
+  color: #fafaf9;
+}
+
+html.dark .tag,
+html.dark .status,
+html.dark .place-hint,
+html.dark .hint {
+  color: #a8a29e;
+}
+
+html.dark .board {
+  background-color: #1c1917;
+  background-image: radial-gradient(#44403c 1.3px, transparent 1.3px);
+  box-shadow: inset 0 0 0 1px #292524;
+}
+
+html.dark .composer,
+html.dark .suggest {
+  background: #1c1917;
+  border-color: #44403c;
+  color: #f5f5f4;
+}
+
+html.dark .suggest li.top,
+html.dark .suggest li:hover {
+  background: #44403c;
+  color: #fafaf9;
+}
+
+html.dark .field {
+  background: #292524;
+  border-color: #44403c;
+}
+
+html.dark .field input {
+  color: #fafaf9;
+}
+
+html.dark #theme,
+html.dark #name-input,
+html.dark .coords,
+html.dark .paintbar {
+  background: #292524;
+  color: #fafaf9;
+}
+
+html.dark #theme[aria-pressed='true'] {
+  background: #fafaf9;
+  color: #1c1917;
+}
+
+html.dark .swatch.on,
+html.dark .custom.on {
+  outline-color: #fafaf9;
+}
+
+html.dark .paintbar .size,
+html.dark .paintbar #eraser,
+html.dark .paintbar #paint-done {
+  background: #44403c;
+  color: #fafaf9;
+}
+
+html.dark .paintbar .ink.on,
+html.dark .paintbar .size.on,
+html.dark .paintbar #eraser.on {
+  outline-color: #fafaf9;
+}
+
+html.dark #paint-coords {
+  color: #d6d3d1;
 }
 
 .sr {

@@ -40,6 +40,7 @@ const MIN_ZOOM = 0.2
 const MAX_ZOOM = 6
 const coordsEl = document.getElementById('coords')
 const nameInput = document.getElementById('name-input')
+const themeButton = document.getElementById('theme')
 const tip = document.getElementById('tip')
 const paintbar = document.getElementById('paintbar')
 const paintCoords = document.getElementById('paint-coords')
@@ -1637,6 +1638,20 @@ nameInput.addEventListener('input', () => {
     return
   }
   queueNameClaim(raw)
+})
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark)
+  themeButton.setAttribute('aria-pressed', dark ? 'true' : 'false')
+  themeButton.textContent = dark ? 'Light' : 'Dark'
+}
+
+applyTheme(localStorage.getItem('sticky-dark') === '1')
+themeButton.addEventListener('pointerdown', (event) => event.stopPropagation())
+themeButton.addEventListener('click', (event) => {
+  event.stopPropagation()
+  const dark = !document.documentElement.classList.contains('dark')
+  localStorage.setItem('sticky-dark', dark ? '1' : '0')
+  applyTheme(dark)
 })
 nameInput.value = (localStorage.getItem('sticky-name') || '').slice(0, 20)
 claimName(nameInput.value)
